@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>AuraPresence</AssemblyName>
+    <RootNamespace>Aura.Presence.App</RootNamespace>
+    <Product>Aura</Product>
+    <Description>Rich Presence hub for Discord</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aura.Presence.Sdk\Aura.Presence.Sdk.csproj" />
+  </ItemGroup>
+
+</Project>

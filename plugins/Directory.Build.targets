@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <AuraAppPluginDir>$(MSBuildThisFileDirectory)..\src\Aura.Presence.App\bin\$(Configuration)\net10.0-windows\plugins\$(MSBuildProjectName)\</AuraAppPluginDir>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+
+  <Target Name="CopyToAuraPluginFolder" AfterTargets="Build">
+    <ItemGroup>
+      <AuraPluginFiles Include="$(OutDir)**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(AuraPluginFiles)" DestinationFiles="@(AuraPluginFiles->'$(AuraAppPluginDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+</Project>
