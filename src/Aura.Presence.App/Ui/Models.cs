@@ -456,15 +456,19 @@ public sealed class TextItem : SettingItem
 
     private readonly TextSetting _setting;
     private string _value;
+    private string _text;
     private bool _revealed;
 
     public TextItem(LoadedPlugin loaded, TextSetting setting) : base(loaded, setting)
     {
         _setting = setting;
         _value = Read(setting.Default);
+        _text = _value == setting.Default ? "" : _value;
     }
 
     public bool Monospace => _setting.Monospace;
+
+    public string Placeholder => _setting.Default;
 
     public void Reveal(bool revealed)
     {
@@ -477,18 +481,21 @@ public sealed class TextItem : SettingItem
 
     public string Value
     {
-        get => _setting.Secret && _value.Length > 0 && !_revealed ? Mask : _value;
+        get => _setting.Secret && _text.Length > 0 && !_revealed ? Mask : _text;
         set
         {
             var trimmed = value.Trim();
-            var next = _setting.Secret && trimmed == Mask ? _value
-                : trimmed.Length == 0 ? _setting.Default
-                : trimmed;
 
-            if (next != _value)
+            if (!(_setting.Secret && trimmed == Mask))
             {
-                _value = next;
-                Save(next);
+                _text = trimmed;
+                var next = trimmed.Length == 0 ? _setting.Default : trimmed;
+
+                if (next != _value)
+                {
+                    _value = next;
+                    Save(next);
+                }
             }
 
             Raise();

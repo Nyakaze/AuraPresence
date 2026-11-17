@@ -155,7 +155,8 @@
                 <Border x:Name="Rule" Height="1" VerticalAlignment="Top" Background="{StaticResource Line}" />
                 <DockPanel Margin="0,18">
                     <TextBox x:Name="Box" DockPanel.Dock="Right" Style="{StaticResource Input}" Width="240" Margin="24,0,0,0"
-                             Text="{Binding Value, UpdateSourceTrigger=PropertyChanged, Delay=800}" AutomationProperties.Name="{Binding Label}"
+                             Text="{Binding Value, UpdateSourceTrigger=PropertyChanged, Delay=800}" Tag="{Binding Placeholder}"
+                             AutomationProperties.Name="{Binding Label}"
                              GotKeyboardFocus="Text_GotKeyboardFocus" LostKeyboardFocus="Text_LostKeyboardFocus" />
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="{Binding Label}" Style="{StaticResource Strong}" />
