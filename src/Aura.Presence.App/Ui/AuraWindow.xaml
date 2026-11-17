@@ -151,7 +151,8 @@
                 <Border x:Name="Rule" Height="1" VerticalAlignment="Top" Background="{StaticResource Line}" />
                 <DockPanel Margin="0,18">
                     <TextBox x:Name="Box" DockPanel.Dock="Right" Style="{StaticResource Input}" Width="240" Margin="24,0,0,0"
-                             Text="{Binding Value}" AutomationProperties.Name="{Binding Label}" />
+                             Text="{Binding Value, UpdateSourceTrigger=PropertyChanged, Delay=800}" AutomationProperties.Name="{Binding Label}"
+                             GotKeyboardFocus="Text_GotKeyboardFocus" LostKeyboardFocus="Text_LostKeyboardFocus" />
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="{Binding Label}" Style="{StaticResource Strong}" />
                         <TextBlock Text="{Binding Help}" Style="{StaticResource Small}" Visibility="{Binding Help, Converter={StaticResource Shown}}" />
@@ -165,6 +166,25 @@
                 <DataTrigger Binding="{Binding Monospace}" Value="True">
                     <Setter TargetName="Box" Property="FontFamily" Value="{StaticResource MonoFont}" />
                     <Setter TargetName="Box" Property="FontSize" Value="13" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:LinkItem}">
+            <Grid>
+                <Border x:Name="Rule" Height="1" VerticalAlignment="Top" Background="{StaticResource Line}" />
+                <DockPanel Margin="0,18">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource Button.SecondarySmall}" Margin="24,0,0,0" VerticalAlignment="Center"
+                            Content="{Binding ButtonText}" Click="Link_Click" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Label}" Style="{StaticResource Strong}" />
+                        <TextBlock Text="{Binding Help}" Style="{StaticResource Small}" Visibility="{Binding Help, Converter={StaticResource Shown}}" />
+                    </StackPanel>
+                </DockPanel>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                    <Setter TargetName="Rule" Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -271,15 +291,21 @@
 
                 <TextBlock Text="Settings" Style="{StaticResource H2}" Margin="0,28,0,0" />
                 <TextBlock Text="Changes save as you make them." Style="{StaticResource Small}" Margin="0,2,0,12" />
-                <Border Style="{StaticResource Card}" Padding="24,0" Visibility="{Binding HasSettings, Converter={StaticResource Shown}}">
-                    <ItemsControl ItemsSource="{Binding Settings}" Focusable="False" />
-                </Border>
-                <Border Style="{StaticResource Card}" Padding="24,20"
+                <ItemsControl ItemsSource="{Binding Cards}" Focusable="False">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource Card}" Padding="24,0" Margin="0,0,0,12">
+                                <ItemsControl ItemsSource="{Binding}" Focusable="False" />
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,0,0,12"
                         Visibility="{Binding HasSettings, Converter={StaticResource Shown}, ConverterParameter=invert}">
                     <TextBlock Text="This plugin has no settings." Foreground="{StaticResource Muted}" />
                 </Border>
 
-                <StackPanel Orientation="Horizontal" Margin="0,24,0,0">
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                     <Button Style="{StaticResource Button.Secondary}" Click="OpenData_Click">
                         <StackPanel Orientation="Horizontal">
                             <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.FolderOpen}" />

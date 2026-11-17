@@ -168,7 +168,7 @@ public sealed class PluginItem : Observable
         var file = folder is null ? null : Path.Combine(folder, "icon.png");
 
         if (file is null || !File.Exists(file))
-            return Application.Current.FindResource("G.Puzzle");
+            return Application.Current.FindResource(CatalogItem.All.FirstOrDefault(item => item.Id == plugin.Id)?.IconKey ?? "G.Puzzle");
 
         var image = new BitmapImage();
         image.BeginInit();
@@ -433,7 +433,9 @@ public abstract class SettingItem(LoadedPlugin loaded, PluginSetting setting) : 
 
     public string? Help => setting.Help;
 
-    protected T Read<T>(T fallback) => loaded.Context.Settings.Get(setting.Key, fallback);
+    protected IPluginSettings Settings => loaded.Context.Settings;
+
+    protected T Read<T>(T fallback) => Settings.Get(setting.Key, fallback);
 
     protected void Save<T>(T value) => _ = App.Current.ApplySettingAsync(loaded, setting.Key, value);
 
@@ -443,14 +445,18 @@ public abstract class SettingItem(LoadedPlugin loaded, PluginSetting setting) : 
         ToggleSetting toggle => new ToggleItem(loaded, toggle),
         NumberSetting number => new NumberItem(loaded, number),
         ChoiceSetting choice => new ChoiceItem(loaded, choice),
+        LinkSetting link => new LinkItem(loaded, link),
         _ => null
     };
 }
 
 public sealed class TextItem : SettingItem
 {
+    public const string Mask = "••••••••••••";
+
     private readonly TextSetting _setting;
     private string _value;
+    private bool _revealed;
 
     public TextItem(LoadedPlugin loaded, TextSetting setting) : base(loaded, setting)
     {
@@ -460,20 +466,41 @@ public sealed class TextItem : SettingItem
 
     public bool Monospace => _setting.Monospace;
 
+    public void Reveal(bool revealed)
+    {
+        if (!_setting.Secret || _revealed == revealed)
+            return;
+
+        _revealed = revealed;
+        Raise(nameof(Value));
+    }
+
     public string Value
     {
-        get => _value;
+        get => _setting.Secret && _value.Length > 0 && !_revealed ? Mask : _value;
         set
         {
             var trimmed = value.Trim();
-            var next = trimmed.Length == 0 ? _setting.Default : trimmed;
+            var next = _setting.Secret && trimmed == Mask ? _value
+                : trimmed.Length == 0 ? _setting.Default
+                : trimmed;
 
-            if (Set(ref _value, next))
+            if (next != _value)
+            {
+                _value = next;
                 Save(next);
-            else if (next != value)
-                Raise();
+            }
+
+            Raise();
         }
     }
+}
+
+public sealed class LinkItem(LoadedPlugin loaded, LinkSetting setting) : SettingItem(loaded, setting)
+{
+    public string ButtonText => setting.ButtonText;
+
+    public Uri Url => setting.Url(Settings);
 }
 
 public sealed class ToggleItem : SettingItem
@@ -561,17 +588,42 @@ public sealed class ChoiceOption(ChoiceItem owner, string label, bool isChecked)
 
 public sealed class PluginPage
 {
+    private readonly string _shown;
+
     public PluginPage(PluginItem plugin)
     {
         Plugin = plugin;
-        Settings = [.. plugin.Loaded.Plugin.Settings.Select(setting => SettingItem.For(plugin.Loaded, setting)).OfType<SettingItem>()];
+        var visible = Visible(plugin.Loaded);
+        _shown = Signature(visible);
+        var cards = new List<List<SettingItem>>();
+
+        for (var i = 0; i < visible.Count; i++)
+        {
+            if (SettingItem.For(plugin.Loaded, visible[i]) is not { } item)
+                continue;
+
+            if (cards.Count == 0 || visible[i].Card != visible[i - 1].Card)
+                cards.Add([]);
+
+            cards[^1].Add(item);
+        }
+
+        Cards = cards;
     }
 
     public PluginItem Plugin { get; }
 
-    public IReadOnlyList<SettingItem> Settings { get; }
+    public bool IsCurrent => _shown == Signature(Visible(Plugin.Loaded));
 
-    public bool HasSettings => Settings.Count > 0;
+    public IReadOnlyList<IReadOnlyList<SettingItem>> Cards { get; }
+
+    public bool HasSettings => Cards.Count > 0;
+
+    private static List<PluginSetting> Visible(LoadedPlugin loaded) =>
+        [.. loaded.Plugin.Settings.Where(setting => setting.ShowWhen?.Invoke(loaded.Context.Settings) ?? true)];
+
+    private static string Signature(List<PluginSetting> settings) =>
+        string.Join('\n', settings.Select(setting => $"{setting.Key}\t{setting.Label}\t{setting.Help}\t{setting.Card}"));
 }
 
 public sealed record CatalogItem(string Id, string Name, string Category, string Blurb, string IconKey, IReadOnlyList<string> Uses, bool LimitedAccess)

@@ -29,8 +29,26 @@ public partial class AuraWindow : Window
 
     public void Refresh()
     {
-        if (!_dragging)
-            _model.Update(App.Current);
+        if (_dragging)
+            return;
+
+        _model.Update(App.Current);
+
+        if (Page.Content is not PluginPage { IsCurrent: false } page)
+            return;
+
+        var typingIn = (Keyboard.FocusedElement as TextBox)?.DataContext is SettingItem item ? item.Label : null;
+        Page.Content = new PluginPage(page.Plugin);
+
+        if (typingIn is not null)
+            Dispatcher.InvokeAsync(() =>
+            {
+                if (Find<TextBox>(Page, box => box.DataContext is SettingItem setting && setting.Label == typingIn) is not { } box)
+                    return;
+
+                box.Focus();
+                box.CaretIndex = box.Text.Length;
+            }, DispatcherPriority.Loaded);
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -77,6 +95,20 @@ public partial class AuraWindow : Window
     private void Chip_Checked(object sender, RoutedEventArgs e) => _market.Category = ItemOf<CategoryOption>(sender).Label;
 
     private void Logs_Click(object sender, RoutedEventArgs e) => App.OpenFolder(AppPaths.Logs);
+
+    private void Link_Click(object sender, RoutedEventArgs e) => App.OpenFolder(ItemOf<LinkItem>(sender).Url.AbsoluteUri);
+
+    private void Text_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (((FrameworkElement)sender).DataContext is TextItem item)
+            item.Reveal(true);
+    }
+
+    private void Text_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (((FrameworkElement)sender).DataContext is TextItem item)
+            Dispatcher.InvokeAsync(() => item.Reveal(false));
+    }
 
     private void Pin_Click(object sender, RoutedEventArgs e)
     {
@@ -163,21 +195,22 @@ public partial class AuraWindow : Window
 
         _model.Sources.Move(from, to);
         CommitOrder();
-        Dispatcher.InvokeAsync(() => FindGrip(Page, item)?.Focus(), DispatcherPriority.Loaded);
+        Dispatcher.InvokeAsync(() => Find<Button>(Page, grip => grip.Name == "Grip" && grip.DataContext == item)?.Focus(),
+            DispatcherPriority.Loaded);
     }
 
     private void CommitOrder() => App.Current.Host.SetOrder(_model.Sources.Select(item => item.Id));
 
-    private static Button? FindGrip(DependencyObject parent, PluginItem item)
+    private static T? Find<T>(DependencyObject parent, Func<T, bool> match) where T : DependencyObject
     {
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
         {
             var child = VisualTreeHelper.GetChild(parent, i);
 
-            if (child is Button { Name: "Grip" } grip && grip.DataContext == item)
-                return grip;
+            if (child is T candidate && match(candidate))
+                return candidate;
 
-            if (FindGrip(child, item) is { } found)
+            if (Find(child, match) is { } found)
                 return found;
         }
 

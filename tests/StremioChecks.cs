@@ -63,6 +63,14 @@ Check(!AniListClient.TitlesMatch("Breaking Bad", "Bokura no", null), "anilist ti
 
 var show = new NowPlaying { Title = "As a Reincarnated Aristocrat", Kind = MediaKind.Episode, Season = 3, Episode = 2 };
 Check(StremioPlugin.StateLine(show) == "S03E02", "episode state line");
+
+var entryIds = new Dictionary<string, string> { [MediaIdKeys.Imdb] = "tt41296544" };
+var lookupIds = new Dictionary<string, string> { [MediaIdKeys.AniList] = "206949", [MediaIdKeys.Imdb] = "tt41296544" };
+Check(StremioPlugin.MergeIds(entryIds, lookupIds).GetValueOrDefault(MediaIdKeys.AniList) == "206949", "a lookup of the same show adds its anilist id");
+Check(!StremioPlugin.MergeIds(entryIds, new Dictionary<string, string> { [MediaIdKeys.AniList] = "1", [MediaIdKeys.Imdb] = "tt1" }).ContainsKey(MediaIdKeys.AniList),
+    "a lookup of another show adds nothing");
+Check(!StremioPlugin.MergeIds(entryIds, new Dictionary<string, string> { [MediaIdKeys.AniList] = "1" }).ContainsKey(MediaIdKeys.AniList),
+    "a lookup without an imdb id can't be confirmed");
 Check(StremioPlugin.StateLine(show with { State = PlaybackState.Paused }) == "S03E02 - Paused", "paused episode state line");
 Check(StremioPlugin.StateLine(show with { Kind = MediaKind.Other }) is null, "an unknown episode shows no made-up label");
 Check(StremioPlugin.StateLine(show with { Kind = MediaKind.Other, State = PlaybackState.Paused }) == "Paused", "an unknown episode still shows pause");

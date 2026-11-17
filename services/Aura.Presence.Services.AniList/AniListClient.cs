@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -28,11 +27,23 @@ public sealed record AniListMedia(
 
 public sealed class AniListClient : IDisposable
 {
-    private const string Endpoint = "https://graphql.anilist.co";
+    private const string MediaFields = "id type format title { romaji english } coverImage { large }";
 
-    private const string SearchQuery = """
+    private const string SearchQuery = $$"""
         query ($search: String, $type: MediaType) {
-          Media(search: $search, type: $type) { id type format title { romaji english } coverImage { large } }
+          Media(search: $search, type: $type) { {{MediaFields}} }
+        }
+        """;
+
+    private const string AnimeSearchQuery = $$"""
+        query ($search: String) {
+          Page(perPage: 10) { media(search: $search, type: ANIME) { {{MediaFields}} } }
+        }
+        """;
+
+    private const string MalIdQuery = $$"""
+        query ($idMal: Int) {
+          Media(idMal: $idMal, type: ANIME) { {{MediaFields}} }
         }
         """;
 
@@ -74,6 +85,23 @@ public sealed class AniListClient : IDisposable
         return media;
     }
 
+    public async Task<AniListMedia?> FindAnimeAsync(string search, Func<AniListMedia, bool> accepts,
+        CancellationToken cancellationToken = default)
+    {
+        var data = await AniListGraphQl.QueryAsync(_http, AnimeSearchQuery, new JsonObject { ["search"] = search }, null,
+            cancellationToken);
+
+        return data.GetProperty("Page").GetProperty("media").EnumerateArray().Select(ToMedia).FirstOrDefault(accepts);
+    }
+
+    public async Task<AniListMedia?> FindByMalIdAsync(int malId, CancellationToken cancellationToken = default)
+    {
+        var data = await AniListGraphQl.QueryAsync(_http, MalIdQuery, new JsonObject { ["idMal"] = malId }, null,
+            cancellationToken);
+
+        return data.GetProperty("Media") is { ValueKind: JsonValueKind.Object } media ? ToMedia(media) : null;
+    }
+
     public void Dispose()
     {
         if (_ownsHttp)
@@ -86,40 +114,18 @@ public sealed class AniListClient : IDisposable
     private async Task<AniListMedia?> SearchAsync(string search, string requiredTitle, AniListMediaType type,
         CancellationToken cancellationToken)
     {
-        var request = new JsonObject
-        {
-            ["query"] = SearchQuery,
-            ["variables"] = new JsonObject { ["search"] = search, ["type"] = type.ToString().ToUpperInvariant() }
-        };
-
         try
         {
-            using var content = new StringContent(request.ToJsonString(), Encoding.UTF8, "application/json");
-            using var response = await _http.PostAsync(Endpoint, content, cancellationToken);
+            var data = await AniListGraphQl.QueryAsync(_http, SearchQuery,
+                new JsonObject { ["search"] = search, ["type"] = type.ToString().ToUpperInvariant() }, null, cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
-                return null;
-
-            using var document = JsonDocument.Parse(await response.Content.ReadAsStreamAsync(cancellationToken));
-
-            if (!document.RootElement.TryGetProperty("data", out var data) ||
-                !data.TryGetProperty("Media", out var media) || media.ValueKind is not JsonValueKind.Object)
-                return null;
-
-            var titles = media.GetProperty("title");
-            var romaji = Text(titles, "romaji");
-            var english = Text(titles, "english");
-
-            return TitlesMatch(requiredTitle, romaji, english)
-                ? new AniListMedia(media.GetProperty("id").GetInt32(), type, romaji, english,
-                    media.TryGetProperty("coverImage", out var cover) && cover.ValueKind is JsonValueKind.Object
-                        ? Text(cover, "large")
-                        : null,
-                    Text(media, "format"))
+            return data.GetProperty("Media") is { ValueKind: JsonValueKind.Object } found && ToMedia(found) is var media &&
+                   TitlesMatch(requiredTitle, media.Romaji, media.English)
+                ? media
                 : null;
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException
-                                              or JsonException or KeyNotFoundException or InvalidOperationException)
+                                              or AniListException or KeyNotFoundException or InvalidOperationException)
         {
             if (cancellationToken.IsCancellationRequested)
                 throw;
@@ -128,11 +134,23 @@ public sealed class AniListClient : IDisposable
         }
     }
 
+    private static AniListMedia ToMedia(JsonElement media)
+    {
+        var titles = media.GetProperty("title");
+
+        return new AniListMedia(
+            media.GetProperty("id").GetInt32(),
+            Enum.Parse<AniListMediaType>(media.GetProperty("type").GetString() ?? nameof(AniListMediaType.Anime), ignoreCase: true),
+            AniListGraphQl.Text(titles, "romaji"),
+            AniListGraphQl.Text(titles, "english"),
+            media.TryGetProperty("coverImage", out var cover) && cover.ValueKind is JsonValueKind.Object
+                ? AniListGraphQl.Text(cover, "large")
+                : null,
+            AniListGraphQl.Text(media, "format"));
+    }
+
     private static bool Overlaps(string searched, string? candidate) =>
         !string.IsNullOrWhiteSpace(candidate) &&
         (searched.Contains(candidate, StringComparison.OrdinalIgnoreCase) ||
          candidate.Contains(searched, StringComparison.OrdinalIgnoreCase));
-
-    private static string? Text(JsonElement element, string name) =>
-        element.TryGetProperty(name, out var value) && value.ValueKind is JsonValueKind.String ? value.GetString() : null;
 }

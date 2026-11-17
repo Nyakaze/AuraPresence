@@ -210,7 +210,7 @@ public sealed partial class StremioPlugin : IPresencePlugin
             EpisodeTitle = player?.EpisodeName,
             Year = lookup?.Year,
             PosterUrl = _entry?.PosterUrl ?? lookup?.PosterUrl,
-            Ids = id?.Ids ?? lookup?.Ids ?? new Dictionary<string, string>(),
+            Ids = MergeIds(id?.Ids, lookup?.Ids),
             State = playback.State,
             Position = playback.Position,
             Duration = playback.Duration
@@ -245,6 +245,24 @@ public sealed partial class StremioPlugin : IPresencePlugin
             await _context.Media.PublishAsync(media);
             _publishedAt = now;
         }
+    }
+
+    public static IReadOnlyDictionary<string, string> MergeIds(IReadOnlyDictionary<string, string>? entry,
+        IReadOnlyDictionary<string, string>? lookup)
+    {
+        if (entry is null || lookup is null)
+            return entry ?? lookup ?? new Dictionary<string, string>();
+
+        if (!entry.TryGetValue(MediaIdKeys.Imdb, out var imdb) || !lookup.TryGetValue(MediaIdKeys.Imdb, out var lookedUp) ||
+            imdb != lookedUp)
+            return entry;
+
+        var merged = new Dictionary<string, string>(lookup);
+
+        foreach (var (key, value) in entry)
+            merged[key] = value;
+
+        return merged;
     }
 
     public static string? StateLine(NowPlaying media)

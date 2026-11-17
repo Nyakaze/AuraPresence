@@ -61,6 +61,7 @@ public partial class App : Application
     {
         loaded.Context.Settings.Set(key, value);
         await Host.RestartAsync(loaded);
+        QueueRefresh();
     }
 
     protected override void OnStartup(StartupEventArgs e)
