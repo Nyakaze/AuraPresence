@@ -13,6 +13,7 @@ public sealed class PluginHost : IAsyncDisposable
     private readonly ActivityArbiter _arbiter;
     private readonly CancellationTokenSource _shutdown = new();
     private readonly List<LoadedPlugin> _plugins = [];
+    private readonly MediaBus _mediaBus = new();
 
     public PluginHost(ActivityArbiter arbiter)
     {
@@ -31,7 +32,7 @@ public sealed class PluginHost : IAsyncDisposable
                 continue;
             }
 
-            var context = new PluginContext(plugin, _arbiter);
+            var context = new PluginContext(plugin, _arbiter, _mediaBus);
             _plugins.Add(new LoadedPlugin(plugin, context));
 
             try

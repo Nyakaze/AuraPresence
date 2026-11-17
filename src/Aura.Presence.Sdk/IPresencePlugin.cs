@@ -17,6 +17,8 @@ public interface IPluginContext
 {
     IActivityReporter Activity { get; }
 
+    IMediaBus Media { get; }
+
     IPluginLog Log { get; }
 
     IPluginSettings Settings { get; }

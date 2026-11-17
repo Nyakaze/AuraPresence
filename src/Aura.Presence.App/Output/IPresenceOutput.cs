@@ -2,23 +2,16 @@ using Aura.Presence.App.Arbitration;
 
 namespace Aura.Presence.App.Output;
 
-public interface IPresenceOutput : IAsyncDisposable
+public sealed record OutputStatus(string Summary, bool Healthy)
 {
-    Task ShowAsync(ActivityClaim? claim, CancellationToken cancellationToken);
+    public static OutputStatus Idle { get; } = new("Discord: waiting for an activity", true);
 }
 
-public sealed class LoggingPresenceOutput : IPresenceOutput
+public interface IPresenceOutput : IAsyncDisposable
 {
-    private readonly AppLog _log = AppLog.For("Output");
+    event Action<OutputStatus>? StatusChanged;
 
-    public Task ShowAsync(ActivityClaim? claim, CancellationToken cancellationToken)
-    {
-        _log.Write(Sdk.PluginLogLevel.Information, claim is null
-            ? "Presence cleared."
-            : $"Presence from '{claim.SourceId}': {claim.Activity.Kind} | {claim.Activity.Details} | {claim.Activity.State}");
+    OutputStatus Status { get; }
 
-        return Task.CompletedTask;
-    }
-
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    void Show(ActivityClaim? claim);
 }

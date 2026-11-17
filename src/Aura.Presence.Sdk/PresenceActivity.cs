@@ -18,6 +18,8 @@ public sealed record PresenceActivity
 
     public ActivityKind Kind { get; init; } = ActivityKind.Playing;
 
+    public string? Name { get; init; }
+
     public string? Details { get; init; }
 
     public string? State { get; init; }

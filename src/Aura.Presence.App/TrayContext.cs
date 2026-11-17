@@ -10,9 +10,12 @@ public sealed class TrayContext : ApplicationContext
     private readonly AppLog _log = AppLog.For("App");
     private readonly SynchronizationContext _ui;
     private readonly ActivityArbiter _arbiter = new();
-    private readonly IPresenceOutput _output = new LoggingPresenceOutput();
+    private const int TooltipLimit = 127;
+
+    private readonly IPresenceOutput _output = new DiscordPresenceOutput();
     private readonly PluginHost _host;
     private readonly NotifyIcon _trayIcon;
+    private readonly ToolStripMenuItem _discordItem;
     private readonly ToolStripMenuItem _statusItem;
     private readonly ToolStripMenuItem _pluginsItem;
 
@@ -21,10 +24,12 @@ public sealed class TrayContext : ApplicationContext
         _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
         _host = new PluginHost(_arbiter);
 
+        _discordItem = new ToolStripMenuItem(_output.Status.Summary) { Enabled = false };
         _statusItem = new ToolStripMenuItem("Nothing to show") { Enabled = false };
         _pluginsItem = new ToolStripMenuItem("Plugins");
 
         var menu = new ContextMenuStrip();
+        menu.Items.Add(_discordItem);
         menu.Items.Add(_statusItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_pluginsItem);
@@ -41,7 +46,19 @@ public sealed class TrayContext : ApplicationContext
         };
 
         _arbiter.CurrentChanged += OnCurrentChanged;
+        _output.StatusChanged += status => _ui.Post(_ => ShowOutputStatus(status), null);
         _ = StartAsync();
+    }
+
+    private void ShowOutputStatus(OutputStatus status)
+    {
+        _discordItem.Text = status.Summary;
+
+        var tooltip = $"Aura — {status.Summary}";
+        _trayIcon.Text = tooltip.Length <= TooltipLimit ? tooltip : tooltip[..(TooltipLimit - 1)] + "…";
+
+        if (!status.Healthy)
+            _log.Warn(status.Summary);
     }
 
     private async Task StartAsync()
@@ -59,7 +76,7 @@ public sealed class TrayContext : ApplicationContext
 
     private void OnCurrentChanged(ActivityClaim? claim)
     {
-        _ = _output.ShowAsync(claim, CancellationToken.None);
+        _output.Show(claim);
         _ui.Post(_ => _statusItem.Text = claim is null
             ? "Nothing to show"
             : $"Showing: {claim.Activity.Details ?? claim.SourceId}", null);
@@ -93,7 +110,6 @@ public sealed class TrayContext : ApplicationContext
     {
         _trayIcon.Visible = false;
         await _host.DisposeAsync();
-        await _output.ShowAsync(null, CancellationToken.None);
         await _output.DisposeAsync();
         _log.Info("Aura stopped.");
         ExitThread();

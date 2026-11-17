@@ -9,11 +9,12 @@ public sealed class PluginContext : IPluginContext, IActivityReporter
     private readonly string _sourceId;
     private readonly int _priority;
 
-    public PluginContext(IPresencePlugin plugin, ActivityArbiter arbiter)
+    public PluginContext(IPresencePlugin plugin, ActivityArbiter arbiter, MediaBus mediaBus)
     {
         _arbiter = arbiter;
         _sourceId = plugin.Id;
         _priority = plugin.DefaultPriority;
+        Media = mediaBus.For(plugin.Id);
         DataDirectory = AppPaths.PluginDataFor(plugin.Id);
         Log = AppLog.For(plugin.Id);
         Settings = new JsonPluginSettings(Path.Combine(DataDirectory, "settings.json"));
@@ -26,6 +27,8 @@ public sealed class PluginContext : IPluginContext, IActivityReporter
     public string? HealthMessage { get; private set; }
 
     public IActivityReporter Activity => this;
+
+    public IMediaBus Media { get; }
 
     public IPluginLog Log { get; }
 

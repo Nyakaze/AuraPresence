@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Aura.Presence.Sdk\Aura.Presence.Sdk.csproj" />
+    <ProjectReference Include="..\..\..\Corvus\Crovus\Crovus.csproj" />
   </ItemGroup>
 
 </Project>
