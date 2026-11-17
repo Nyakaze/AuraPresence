@@ -18,11 +18,12 @@ internal static class Native
     public const int WmContextMenu = 0x7B;
     public const int WmApp = 0x8000;
     public const int SmCxSmallIcon = 49;
+    public const int SmCxFrame = 32;
+    public const int SmCyFrame = 33;
+    public const int SmCxPaddedBorder = 92;
     public const int AllowAnyProcess = -1;
     public const int DwmUseImmersiveDarkMode = 20;
     public const int DwmBorderColor = 34;
-    public const int DwmCaptionColor = 35;
-    public const int DwmTextColor = 36;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct NotifyIconData
@@ -58,6 +59,9 @@ internal static class Native
 
     [DllImport("user32.dll")]
     public static extern int GetSystemMetrics(int index);
+
+    [DllImport("user32.dll")]
+    public static extern int GetSystemMetricsForDpi(int index, uint dpi);
 
     [DllImport("user32.dll")]
     public static extern IntPtr CreateIconFromResourceEx(byte[] bits, int size, bool icon, int version, int width, int height, int flags);

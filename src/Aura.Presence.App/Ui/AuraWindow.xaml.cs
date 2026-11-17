@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -56,13 +57,44 @@ public partial class AuraWindow : Window
         base.OnSourceInitialized(e);
         var handle = new WindowInteropHelper(this).Handle;
         SetWindowAttribute(handle, Native.DwmUseImmersiveDarkMode, 1);
-        SetWindowAttribute(handle, Native.DwmCaptionColor, 0x000E0C0C);
-        SetWindowAttribute(handle, Native.DwmTextColor, 0x00EFECEC);
         SetWindowAttribute(handle, Native.DwmBorderColor, 0x00262222);
+    }
+
+    protected override void OnStateChanged(EventArgs e)
+    {
+        base.OnStateChanged(e);
+        var maximized = WindowState == WindowState.Maximized;
+        Root.Margin = maximized ? MaximizedInset() : new Thickness(0);
+        MaximizeButton.Content = maximized ? "" : "";
+        MaximizeButton.ToolTip = maximized ? "Restore" : "Maximize";
+        AutomationProperties.SetName(MaximizeButton, maximized ? "Restore" : "Maximize");
+    }
+
+    private Thickness MaximizedInset()
+    {
+        var scale = VisualTreeHelper.GetDpi(this);
+        var dpi = (uint)Math.Round(96 * scale.DpiScaleX);
+        var padding = Native.GetSystemMetricsForDpi(Native.SmCxPaddedBorder, dpi);
+        var x = (Native.GetSystemMetricsForDpi(Native.SmCxFrame, dpi) + padding) / scale.DpiScaleX;
+        var y = (Native.GetSystemMetricsForDpi(Native.SmCyFrame, dpi) + padding) / scale.DpiScaleY;
+
+        return new Thickness(x, y, x, y);
     }
 
     private static void SetWindowAttribute(IntPtr handle, int attribute, int value) =>
         Native.DwmSetWindowAttribute(handle, attribute, ref value, sizeof(int));
+
+    private void Minimize_Click(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
+
+    private void Maximize_Click(object sender, RoutedEventArgs e)
+    {
+        if (WindowState == WindowState.Maximized)
+            SystemCommands.RestoreWindow(this);
+        else
+            SystemCommands.MaximizeWindow(this);
+    }
+
+    private void Close_Click(object sender, RoutedEventArgs e) => SystemCommands.CloseWindow(this);
 
     private void Navigate(object page)
     {
