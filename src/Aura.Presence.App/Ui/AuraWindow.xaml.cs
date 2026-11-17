@@ -132,6 +132,12 @@ public partial class AuraWindow : Window
 
     private void Repos_Click(object sender, RoutedEventArgs e) => Navigate(_repos);
 
+    private void BrowseMarket_Click(object sender, RoutedEventArgs e)
+    {
+        MarketTab.IsChecked = true;
+        MarketTab_Click(sender, e);
+    }
+
     private async void Install_Click(object sender, RoutedEventArgs e) => await ItemOf<CatalogItem>(sender).InstallAsync();
 
     private void AcceptRepos_Click(object sender, RoutedEventArgs e) => _repos.Accept();

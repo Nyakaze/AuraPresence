@@ -140,8 +140,18 @@
                 <TextBlock Text="Shown on Discord, top first" Style="{StaticResource H2}" Margin="0,24,0,0" />
                 <TextBlock Text="When two plugins have something to show, the higher one wins. Drag to change the order."
                            Style="{StaticResource Small}" Margin="0,2,0,12" />
-                <Border Style="{StaticResource Card}" Padding="4">
+                <Border Style="{StaticResource Card}" Padding="4" Visibility="{Binding Sources.Count, Converter={StaticResource Shown}}">
                     <ItemsControl ItemsSource="{Binding Sources}" ItemTemplate="{StaticResource PluginRow}" Focusable="False" />
+                </Border>
+                <Border Style="{StaticResource Card}" Padding="20" Visibility="{Binding Sources.Count, Converter={StaticResource Shown}, ConverterParameter=invert}">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource Button.SecondarySmall}" Content="Open Marketplace"
+                                Click="BrowseMarket_Click" VerticalAlignment="Center" Margin="16,0,0,0" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="No plugin sets your status yet" FontSize="13" FontWeight="SemiBold" />
+                            <TextBlock Text="Install one from the Marketplace, such as Stremio." Style="{StaticResource Small}" Margin="0,4,0,0" />
+                        </StackPanel>
+                    </DockPanel>
                 </Border>
 
                 <StackPanel Visibility="{Binding Helpers.Count, Converter={StaticResource Shown}}">
