@@ -39,14 +39,27 @@ Check(second.Plugin is Probe { Label: "default" }, "clearing the settings falls 
 
 await host.DisposeAsync();
 
-var reopened = new PluginHost(new ActivityArbiter(), new JsonSettings(settingsFile));
+var reopenedArbiter = new ActivityArbiter();
+var reopened = new PluginHost(reopenedArbiter, new JsonSettings(settingsFile));
 await reopened.StartAsync([new First(), new Second()]);
 Check(reopened.Plugins.Select(plugin => plugin.Id).SequenceEqual(["check-second", "check-first"]), "the order is saved");
+
+var third = new Third();
+await reopened.AddAsync([third, new First()]);
+Check(reopened.Plugins.Select(plugin => plugin.Id).SequenceEqual(["check-second", "check-first", "check-third"]) && third.Started,
+    "an installed plugin starts at once, after the saved order, and a duplicate id is ignored");
+
+var removed = (Probe)reopened.Plugins[0].Plugin;
+await reopened.RemoveAsync([reopened.Plugins[0]]);
+Check(removed.Stopped && reopened.Plugins.Select(plugin => plugin.Id).SequenceEqual(["check-first", "check-third"]),
+    "an uninstalled plugin stops and leaves the list");
+Check(reopenedArbiter.Current?.SourceId == "check-first", "the next plugin in line takes over");
 await reopened.DisposeAsync();
 
 File.Delete(settingsFile);
 Directory.Delete(AppPaths.PluginDataFor("check-first"), recursive: true);
 Directory.Delete(AppPaths.PluginDataFor("check-second"), recursive: true);
+Directory.Delete(AppPaths.PluginDataFor("check-third"), recursive: true);
 
 Console.WriteLine("All host checks passed.");
 
@@ -97,4 +110,9 @@ sealed class First : Probe
 sealed class Second : Probe
 {
     public override string Id => "check-second";
+}
+
+sealed class Third : Probe
+{
+    public override string Id => "check-third";
 }

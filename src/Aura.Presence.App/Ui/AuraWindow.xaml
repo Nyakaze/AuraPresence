@@ -35,6 +35,10 @@
                             <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
                             <TextBlock Text="{Binding Version}" FontFamily="{StaticResource MonoFont}" FontSize="12"
                                        Foreground="{StaticResource Muted}" Margin="8,0,0,1" VerticalAlignment="Bottom" />
+                            <Border Style="{StaticResource Tag}" Margin="10,0,0,0" BorderBrush="{StaticResource Action}"
+                                    Visibility="{Binding AvailableUpdate, Converter={StaticResource Shown}}">
+                                <TextBlock Text="Update available" Foreground="{StaticResource Action}" VerticalAlignment="Center" />
+                            </Border>
                         </StackPanel>
                         <DockPanel Margin="0,2,0,0">
                             <Ellipse x:Name="Dot" Style="{StaticResource Dot}" Margin="0,0,7,0" Visibility="Collapsed" />
@@ -310,7 +314,25 @@
                     <TextBlock Text="This plugin has no settings." Foreground="{StaticResource Muted}" />
                 </Border>
 
+                <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,12,0,0" Visibility="{Binding Confirming, Converter={StaticResource Shown}}">
+                    <StackPanel>
+                        <TextBlock Text="{Binding UninstallQuestion}" Style="{StaticResource H2}" />
+                        <TextBlock Text="It stops now, and its files are removed when Aura next starts. Its settings stay, so installing it again restores them."
+                                   Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,2,0,14" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource Button.Primary}" Content="Uninstall" Click="UninstallConfirm_Click" IsEnabled="{Binding Idle}" />
+                            <Button Style="{StaticResource Button.Secondary}" Content="Keep it" Click="UninstallCancel_Click" Margin="10,0,0,0" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <TextBlock Text="{Binding Error}" Foreground="{StaticResource Fail}" TextWrapping="Wrap" Margin="0,12,0,0"
+                           Visibility="{Binding Error, Converter={StaticResource Shown}}" />
+
                 <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                    <Button Style="{StaticResource Button.Primary}" Click="PluginUpdate_Click" Margin="0,0,10,0"
+                            Visibility="{Binding Plugin.AvailableUpdate, Converter={StaticResource Shown}}" IsEnabled="{Binding Idle}">
+                        <TextBlock Text="{Binding Plugin.UpdateText}" />
+                    </Button>
                     <Button Style="{StaticResource Button.Secondary}" Click="OpenData_Click">
                         <StackPanel Orientation="Horizontal">
                             <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.FolderOpen}" />
@@ -324,6 +346,8 @@
                             <TextBlock Text="Reset to defaults" Margin="8,0,0,0" />
                         </StackPanel>
                     </Button>
+                    <Button Style="{StaticResource Button.Secondary}" Click="Uninstall_Click" Margin="10,0,0,0" Content="Uninstall"
+                            Visibility="{Binding Plugin.CanUninstall, Converter={StaticResource Shown}}" />
                 </StackPanel>
             </StackPanel>
             <DataTemplate.Triggers>
@@ -356,21 +380,23 @@
                             <Border DockPanel.Dock="Left" Style="{StaticResource Tag}">
                                 <TextBlock Text="{Binding Category}" VerticalAlignment="Center" />
                             </Border>
-                            <Grid HorizontalAlignment="Right" VerticalAlignment="Center">
-                                <StackPanel x:Name="Installed" Orientation="Horizontal" Visibility="Collapsed">
-                                    <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Check}" Foreground="{StaticResource Muted}" Width="14" Height="14" />
-                                    <TextBlock Text="Installed" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Muted}" Margin="6,0,0,0" />
-                                </StackPanel>
-                                <TextBlock x:Name="Soon" Text="Coming soon" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Muted}" />
-                            </Grid>
+                            <Border DockPanel.Dock="Left" Style="{StaticResource Tag}" Margin="6,0,0,0" BorderBrush="{StaticResource Warn}"
+                                    Visibility="{Binding ThirdParty, Converter={StaticResource Shown}}">
+                                <TextBlock Text="Third-party" Foreground="{StaticResource Warn}" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Check}" Foreground="{StaticResource Muted}"
+                                                Width="14" Height="14" Margin="0,0,6,0" Visibility="{Binding IsInstalled, Converter={StaticResource Shown}}" />
+                                <TextBlock x:Name="State" Text="{Binding State}" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Muted}" />
+                            </StackPanel>
                         </DockPanel>
                         <DockPanel DockPanel.Dock="Top">
                             <Border DockPanel.Dock="Left" Style="{StaticResource Tile}" Margin="0,0,12,0">
                                 <ContentPresenter Content="{Binding Icon}" Width="24" Height="24" />
                             </Border>
                             <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
-                                <TextBlock Text="By Aura" FontSize="13" Foreground="{StaticResource Muted}" />
+                                <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding Byline}" FontSize="13" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </DockPanel>
                         <TextBlock Text="{Binding Blurb}" Style="{StaticResource Body}" Margin="0,12,0,0" />
@@ -378,9 +404,8 @@
                 </Grid>
             </Border>
             <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding Installed}" Value="True">
-                    <Setter TargetName="Installed" Property="Visibility" Value="Visible" />
-                    <Setter TargetName="Soon" Property="Visibility" Value="Collapsed" />
+                <DataTrigger Binding="{Binding HasUpdate}" Value="True">
+                    <Setter TargetName="State" Property="Foreground" Value="{StaticResource Action}" />
                 </DataTrigger>
                 <Trigger SourceName="Card" Property="IsMouseOver" Value="True">
                     <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource LineStrong}" />
@@ -406,24 +431,23 @@
 
         <DataTemplate DataType="{x:Type ui:MarketPage}">
             <StackPanel>
-                <Grid>
+                <Grid Visibility="{Binding Notice, Converter={StaticResource Shown}}" Margin="0,0,0,24">
                     <Rectangle RadiusX="8" RadiusY="8" Stroke="{StaticResource LineStrong}" StrokeDashArray="4 3" />
                     <DockPanel Margin="16,12">
                         <ContentControl DockPanel.Dock="Left" Style="{StaticResource Glyph}" Content="{StaticResource G.Info}"
                                         Foreground="{StaticResource Muted}" Margin="0,1,10,0" VerticalAlignment="Top" />
-                        <TextBlock FontSize="13" Foreground="{StaticResource Muted}" TextWrapping="Wrap">
-                            <Run Text="Preview." FontWeight="SemiBold" Foreground="{StaticResource Ink}" />
-                            <Run Text="This catalogue is a placeholder. For now, plugins install by copying them into Aura’s plugins folder." />
-                        </TextBlock>
+                        <TextBlock Text="{Binding Notice}" FontSize="13" Foreground="{StaticResource Muted}" TextWrapping="Wrap" />
                     </DockPanel>
                 </Grid>
-                <DockPanel Margin="0,24,0,8">
+                <DockPanel Margin="0,0,0,8">
                     <Grid DockPanel.Dock="Left" Width="300" Margin="0,0,12,0">
                         <TextBox Style="{StaticResource Input}" Tag="Search plugins" Padding="38,0,12,0"
                                  Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Search plugins" />
                         <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Search}" Foreground="{StaticResource Muted}"
                                         HorizontalAlignment="Left" Margin="13,0,0,0" IsHitTestVisible="False" />
                     </Grid>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource Button.SecondarySmall}" Click="Repos_Click" VerticalAlignment="Center"
+                            Content="{Binding ReposLabel}" />
                     <ItemsControl ItemsSource="{Binding Categories}" Focusable="False" VerticalAlignment="Center">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -463,61 +487,147 @@
                         <ContentPresenter Content="{Binding Icon}" Width="32" Height="32" />
                     </Border>
                     <Grid DockPanel.Dock="Right" VerticalAlignment="Center">
-                        <StackPanel x:Name="Installed" Orientation="Horizontal" Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" Visibility="{Binding ShowsButton, Converter={StaticResource Shown}, ConverterParameter=invert}">
                             <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Check}" Foreground="{StaticResource Muted}" />
                             <TextBlock Text="Installed" FontWeight="SemiBold" Foreground="{StaticResource Muted}" Margin="6,0,0,0" />
                         </StackPanel>
-                        <Button x:Name="Soon" Style="{StaticResource Button.Secondary}" IsEnabled="False" Content="Coming soon" />
+                        <Button Style="{StaticResource Button.Primary}" Click="Install_Click" IsEnabled="{Binding CanInstall}"
+                                Visibility="{Binding ShowsButton, Converter={StaticResource Shown}}">
+                            <TextBlock Text="{Binding ActionText}" />
+                        </Button>
                     </Grid>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="{Binding Name}" Style="{StaticResource H1}" />
                         <TextBlock Style="{StaticResource Small}">
-                            <Run Text="By Aura ·" />
+                            <Run Text="{Binding Byline, Mode=OneWay}" />
+                            <Run Text="·" />
                             <Run Text="{Binding Category, Mode=OneWay}" />
+                            <Run Text="·" />
+                            <Run Text="{Binding Details, Mode=OneWay}" />
                         </TextBlock>
                     </StackPanel>
                 </DockPanel>
+                <TextBlock Text="{Binding Error}" Foreground="{StaticResource Fail}" TextWrapping="Wrap" Margin="0,16,0,0"
+                           Visibility="{Binding Error, Converter={StaticResource Shown}}" />
                 <TextBlock Text="{Binding Blurb}" Style="{StaticResource Body}" FontSize="16" LineHeight="25" MaxWidth="560"
                            HorizontalAlignment="Left" Margin="0,24,0,0" />
-                <TextBlock Text="What it uses" Style="{StaticResource H2}" Margin="0,28,0,12" />
-                <Border Style="{StaticResource Card}" Padding="24,0">
-                    <ItemsControl ItemsSource="{Binding Uses}" Focusable="False">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid>
-                                    <Border x:Name="Rule" Height="1" VerticalAlignment="Top" Background="{StaticResource Line}" />
-                                    <DockPanel Margin="0,14">
-                                        <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Check}" Foreground="{StaticResource Action}"
-                                                        Margin="0,0,12,0" />
-                                        <TextBlock Text="{Binding}" Foreground="{StaticResource Text}" TextWrapping="Wrap" />
-                                    </DockPanel>
-                                </Grid>
-                                <DataTemplate.Triggers>
-                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
-                                        <Setter TargetName="Rule" Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </DataTemplate.Triggers>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Border>
+                <StackPanel Visibility="{Binding Uses.Count, Converter={StaticResource Shown}}">
+                    <TextBlock Text="What it uses" Style="{StaticResource H2}" Margin="0,28,0,12" />
+                    <Border Style="{StaticResource Card}" Padding="24,0">
+                        <ItemsControl ItemsSource="{Binding Uses}" Focusable="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Border x:Name="Rule" Height="1" VerticalAlignment="Top" Background="{StaticResource Line}" />
+                                        <DockPanel Margin="0,14">
+                                            <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Check}" Foreground="{StaticResource Action}"
+                                                            Margin="0,0,12,0" />
+                                            <TextBlock Text="{Binding}" Foreground="{StaticResource Text}" TextWrapping="Wrap" />
+                                        </DockPanel>
+                                    </Grid>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                                            <Setter TargetName="Rule" Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                </StackPanel>
                 <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,24,0,0">
                     <DockPanel>
-                        <ContentControl DockPanel.Dock="Left" Style="{StaticResource Glyph}" Content="{StaticResource G.ShieldCheck}"
+                        <ContentControl x:Name="Shield" DockPanel.Dock="Left" Style="{StaticResource Glyph}" Content="{StaticResource G.ShieldCheck}"
                                         Foreground="{StaticResource Action}" Width="22" Height="22" Margin="0,0,14,0" VerticalAlignment="Top" />
                         <StackPanel>
                             <TextBlock Text="{Binding AccessTitle}" Style="{StaticResource H2}" />
-                            <TextBlock Text="{Binding AccessText}" Style="{StaticResource Small}" Margin="0,2,0,0" />
+                            <TextBlock Text="{Binding AccessText}" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,2,0,0" />
                         </StackPanel>
                     </DockPanel>
                 </Border>
             </StackPanel>
             <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding Item.Installed}" Value="True">
-                    <Setter TargetName="Installed" Property="Visibility" Value="Visible" />
-                    <Setter TargetName="Soon" Property="Visibility" Value="Collapsed" />
+                <DataTrigger Binding="{Binding Item.ThirdParty}" Value="True">
+                    <Setter TargetName="Shield" Property="Foreground" Value="{StaticResource Warn}" />
                 </DataTrigger>
             </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="RepoRowTemplate" DataType="{x:Type ui:RepoRow}">
+            <Grid>
+                <Border x:Name="Rule" Height="1" VerticalAlignment="Top" Background="{StaticResource Line}" />
+                <DockPanel Margin="0,16">
+                    <Button x:Name="Remove" DockPanel.Dock="Right" Style="{StaticResource Button.SecondarySmall}" Content="Remove"
+                            Click="RemoveRepo_Click" Margin="24,0,0,0" VerticalAlignment="Center" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}" Style="{StaticResource Strong}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding MetaUrl}" FontFamily="{StaticResource MonoFont}" FontSize="12" Foreground="{StaticResource Muted}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="Status" Text="{Binding Status}" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                    </StackPanel>
+                </DockPanel>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                    <Setter TargetName="Rule" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Official}" Value="True">
+                    <Setter TargetName="Remove" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Failed}" Value="True">
+                    <Setter TargetName="Status" Property="Foreground" Value="{StaticResource Fail}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:ReposPage}">
+            <StackPanel>
+                <Button Style="{StaticResource Button.Text}" Click="Back_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.ChevronLeft}" />
+                        <TextBlock Text="Marketplace" Margin="4,0,0,0" />
+                    </StackPanel>
+                </Button>
+                <TextBlock Text="Plugin repos" Style="{StaticResource H1}" Margin="0,16,0,0" />
+                <TextBlock Text="A repo is a meta.json file online that lists plugins and where to download them."
+                           Style="{StaticResource Small}" Margin="0,2,0,0" />
+
+                <TextBlock Text="Official" Style="{StaticResource H2}" Margin="0,28,0,12" />
+                <Border Style="{StaticResource Card}" Padding="24,0">
+                    <ContentPresenter Content="{Binding Official}" ContentTemplate="{StaticResource RepoRowTemplate}" />
+                </Border>
+
+                <TextBlock Text="Custom repos" Style="{StaticResource H2}" Margin="0,28,0,12" />
+                <Border Style="{StaticResource Card}" Padding="24,20" Visibility="{Binding WarningAccepted, Converter={StaticResource Shown}, ConverterParameter=invert}">
+                    <DockPanel>
+                        <ContentControl DockPanel.Dock="Left" Style="{StaticResource Glyph}" Content="{StaticResource G.ShieldCheck}"
+                                        Foreground="{StaticResource Warn}" Width="22" Height="22" Margin="0,0,14,0" VerticalAlignment="Top" />
+                        <StackPanel>
+                            <TextBlock Text="Read this first" Style="{StaticResource H2}" />
+                            <TextBlock Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                       Text="Plugins run inside Aura with full access to this PC, like any program you install. A plugin from a custom repo can read your files and use your Discord and other accounts. Aura doesn’t check custom repos." />
+                            <TextBlock Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                       Text="If someone told you to paste a link here, be careful: that is a common way to get people to install something harmful. Only add repos from people you trust." />
+                            <Button Style="{StaticResource Button.Secondary}" Content="I understand" Click="AcceptRepos_Click" Margin="0,16,0,0" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+                <StackPanel Visibility="{Binding WarningAccepted, Converter={StaticResource Shown}}">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource Button.Primary}" Content="Add repo" Click="AddRepo_Click"
+                                Margin="12,0,0,0" IsEnabled="{Binding Idle}" />
+                        <TextBox Style="{StaticResource Input}" Tag="https://…/meta.json" Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
+                                 FontFamily="{StaticResource MonoFont}" FontSize="13" AutomationProperties.Name="Repo link" KeyDown="RepoUrl_KeyDown" />
+                    </DockPanel>
+                    <TextBlock Text="{Binding Error}" Foreground="{StaticResource Fail}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Visibility="{Binding Error, Converter={StaticResource Shown}}" />
+                    <TextBlock Text="Plugins from these repos have full access to this PC. Add only repos you trust."
+                               Style="{StaticResource Small}" Margin="0,8,0,12" />
+                    <Border Style="{StaticResource Card}" Padding="24,0" Visibility="{Binding Custom.Count, Converter={StaticResource Shown}}">
+                        <ItemsControl ItemsSource="{Binding Custom}" ItemTemplate="{StaticResource RepoRowTemplate}" Focusable="False" />
+                    </Border>
+                </StackPanel>
+            </StackPanel>
         </DataTemplate>
 
     </Window.Resources>
@@ -544,9 +654,6 @@
                     <StackPanel Orientation="Horizontal">
                         <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Store}" />
                         <TextBlock Text="Marketplace" Margin="8,0,8,0" />
-                        <Border Style="{StaticResource Tag}">
-                            <TextBlock Text="Preview" VerticalAlignment="Center" />
-                        </Border>
                     </StackPanel>
                 </RadioButton>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="12,0,0,0">

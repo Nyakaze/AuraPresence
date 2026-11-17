@@ -9,7 +9,9 @@ public static class AppPaths
 
     public static string PluginData { get; } = EnsureDirectory(Path.Combine(DataRoot, "plugin-data"));
 
-    public static string Plugins { get; } = Path.Combine(AppContext.BaseDirectory, "plugins");
+    public static string Plugins { get; } = Path.Combine(DataRoot, "plugins");
+
+    public static string DevPlugins { get; } = Path.Combine(AppContext.BaseDirectory, "plugins");
 
     public static string SettingsFile { get; } = Path.Combine(DataRoot, "settings.json");
 

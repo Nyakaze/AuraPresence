@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
+using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Data;
@@ -101,6 +102,7 @@ public sealed class PluginItem : Observable
     private Tone _tone;
     private string _moveLabel = "";
     private bool _isDragging;
+    private CatalogEntry? _update;
 
     public PluginItem(LoadedPlugin loaded)
     {
@@ -120,7 +122,21 @@ public sealed class PluginItem : Observable
 
     public string Version { get; }
 
-    public string Byline => $"By Aura · version {Version}";
+    public string Byline => Loaded.Manifest?.Author is { } author ? $"By {author} · version {Version}" : $"Dev build · version {Version}";
+
+    public bool CanUninstall => Loaded.Manifest is not null;
+
+    public CatalogEntry? AvailableUpdate
+    {
+        get => _update;
+        private set
+        {
+            if (Set(ref _update, value))
+                Raise(nameof(UpdateText));
+        }
+    }
+
+    public string? UpdateText => _update is null ? null : $"Update to {_update.Manifest.ParsedVersion}";
 
     public object Icon { get; }
 
@@ -156,26 +172,31 @@ public sealed class PluginItem : Observable
         set => Set(ref _isDragging, value);
     }
 
-    public void Update(IReadOnlyList<ActivityClaim> ranked, Func<string, string> nameOf)
+    public void Update(IReadOnlyList<ActivityClaim> ranked, Func<string, string> nameOf, CatalogEntry? update)
     {
         IsOn = Loaded.Enabled;
         (Status, Tone) = Describe(ranked, nameOf);
+        AvailableUpdate = update;
     }
 
     public static object IconOf(IPresencePlugin plugin)
     {
-        var folder = Path.GetDirectoryName(plugin.GetType().Assembly.Location);
+        var folder = PluginStore.FolderOf(plugin);
         var file = folder is null ? null : Path.Combine(folder, "icon.png");
 
-        if (file is null || !File.Exists(file))
-            return Application.Current.FindResource(CatalogItem.All.FirstOrDefault(item => item.Id == plugin.Id)?.IconKey ?? "G.Puzzle");
+        return file is not null && File.Exists(file) ? Image(new Uri(file)) : Application.Current.FindResource("G.Puzzle");
+    }
 
+    public static ImageSource Image(Uri source)
+    {
         var image = new BitmapImage();
         image.BeginInit();
         image.CacheOption = BitmapCacheOption.OnLoad;
-        image.UriSource = new Uri(file);
+        image.UriSource = source;
         image.EndInit();
-        image.Freeze();
+
+        if (source.IsFile)
+            image.Freeze();
 
         return image;
     }
@@ -378,7 +399,7 @@ public sealed class MainModel : Observable
         Sync(Helpers, plugins.Where(plugin => !plugin.Plugin.ShowsActivity).ToList());
 
         foreach (var item in Sources.Concat(Helpers))
-            item.Update(ranked, app.NameOf);
+            item.Update(ranked, app.NameOf, app.UpdateFor(item.Loaded));
 
         for (var i = 0; i < Sources.Count; i++)
             Sources[i].MoveLabel = $"Move {Sources[i].Name}, {i + 1} of {Sources.Count}. Use the arrow keys.";
@@ -593,9 +614,12 @@ public sealed class ChoiceOption(ChoiceItem owner, string label, bool isChecked)
     }
 }
 
-public sealed class PluginPage
+public sealed class PluginPage : Observable
 {
     private readonly string _shown;
+    private bool _confirming;
+    private bool _busy;
+    private string? _error;
 
     public PluginPage(PluginItem plugin)
     {
@@ -626,6 +650,54 @@ public sealed class PluginPage
 
     public bool HasSettings => Cards.Count > 0;
 
+    public bool Confirming
+    {
+        get => _confirming;
+        set => Set(ref _confirming, value);
+    }
+
+    public bool Busy
+    {
+        get => _busy;
+        private set
+        {
+            if (Set(ref _busy, value))
+                Raise(nameof(Idle));
+        }
+    }
+
+    public bool Idle => !_busy;
+
+    public string? Error
+    {
+        get => _error;
+        private set => Set(ref _error, value);
+    }
+
+    public string UninstallQuestion => $"Uninstall {Plugin.Name}?";
+
+    public async Task<bool> RunAsync(Func<Task> action)
+    {
+        Busy = true;
+        Error = null;
+
+        try
+        {
+            await action();
+            return true;
+        }
+        catch (Exception exception) when (CatalogItem.IsExpected(exception))
+        {
+            Error = Marketplace.Describe(exception);
+            AppLog.For("Ui").Error($"'{Plugin.Id}' failed.", exception);
+            return false;
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
     private static List<PluginSetting> Visible(LoadedPlugin loaded) =>
         [.. loaded.Plugin.Settings.Where(setting => setting.ShowWhen?.Invoke(loaded.Context.Settings) ?? true)];
 
@@ -633,33 +705,107 @@ public sealed class PluginPage
         string.Join('\n', settings.Select(setting => $"{setting.Key}\t{setting.Label}\t{setting.Help}\t{setting.Card}"));
 }
 
-public sealed record CatalogItem(string Id, string Name, string Category, string Blurb, string IconKey, IReadOnlyList<string> Uses, bool LimitedAccess)
+public sealed class CatalogItem : Observable
 {
-    public object Icon => Application.Current.FindResource(IconKey);
+    private bool _busy;
+    private string? _error;
 
-    public bool Installed => App.Current.Host.Plugins.Any(plugin => plugin.Id == Id);
+    public CatalogItem(CatalogEntry entry)
+    {
+        Entry = entry;
+        Icon = Uri.TryCreate(entry.Manifest.IconUrl, UriKind.Absolute, out var icon)
+            ? PluginItem.Image(icon)
+            : Application.Current.FindResource("G.Puzzle");
+    }
 
-    public string AccessTitle => LimitedAccess ? "Can only set your status" : "Runs inside Aura";
+    public CatalogEntry Entry { get; }
 
-    public string AccessText => LimitedAccess
-        ? "Clients reach it over localhost, each with its own token. Requests from websites are refused."
+    private PluginManifest Manifest => Entry.Manifest;
+
+    public string Name => Manifest.Name;
+
+    public string Byline => $"By {Manifest.Author ?? Entry.Repo.Name}";
+
+    public string Category => string.IsNullOrWhiteSpace(Manifest.Category) ? "Other" : Manifest.Category;
+
+    public string Blurb => Manifest.Description ?? "";
+
+    public IReadOnlyList<string> Uses => Manifest.Uses;
+
+    public object Icon { get; }
+
+    public bool ThirdParty => !Entry.Repo.Official;
+
+    public string Details =>
+        $"Version {Manifest.ParsedVersion}" + (Manifest.Size > 0 ? $" · {Manifest.Size / 1048576.0:0.0} MB" : "") +
+        (ThirdParty ? $" · from {Entry.Repo.Name}" : "");
+
+    public string AccessTitle => ThirdParty ? "From a third-party repo" : "Runs inside Aura";
+
+    public string AccessText => ThirdParty
+        ? $"It comes from {Entry.Repo.Name}, which Aura doesn’t check. Like any app you install, it can read and change files on this PC and use your accounts. Install it only if you trust whoever runs that repo."
         : "Like any app you install, it can read and change files on this PC. Install plugins you trust.";
 
-    public static IReadOnlyList<CatalogItem> All { get; } =
-    [
-        new("stremio", "Stremio", "Video", "Shows what you watch in Stremio on your profile. Nothing to set up.", "Logo.Stremio",
-            ["Windows media controls, for what is playing", "Stremio’s saved library on disk, for titles and episodes"], false),
-        new("media", "Media controls", "Music", "Shows Spotify, VLC, browsers and any app in the Windows media flyout.", "G.AudioLines",
-            ["Windows media controls, for the title, artist and position"], false),
-        new("anilist-sync", "AniList sync", "Anime", "Marks episodes watched on your AniList as you finish them.", "Logo.AniList",
-            ["What your video plugins report as playing", "Your AniList account, after you sign in"], false),
-        new("trakt", "Trakt scrobbler", "Video", "Adds the films and episodes you finish to your Trakt history.", "Logo.Trakt",
-            ["What your video plugins report as playing", "Your Trakt account, after you sign in"], false),
-        new("lastfm", "Last.fm scrobbler", "Music", "Scrobbles the songs you play to your Last.fm profile.", "Logo.LastFm",
-            ["What your music plugins report as playing", "Your Last.fm account, after you sign in"], false),
-        new("local-api", "Local API", "Developer", "Lets scripts, game mods and browser extensions set your status.", "G.Webhook",
-            ["HTTP and WebSocket on this PC only", "One token per client, issued and revoked here"], true)
-    ];
+    public LoadedPlugin? Installed => App.Current.Host.Plugins.FirstOrDefault(plugin =>
+        string.Equals(plugin.Manifest?.InternalName, Manifest.InternalName, StringComparison.OrdinalIgnoreCase));
+
+    public bool IsInstalled => Installed is not null;
+
+    public bool HasUpdate => Installed is { } installed && App.Current.UpdateFor(installed) == Entry;
+
+    public bool Compatible => PluginStore.IsCompatible(Manifest.SdkVersion);
+
+    public bool CanInstall => !_busy && Compatible && (!IsInstalled || HasUpdate);
+
+    public bool ShowsButton => !IsInstalled || HasUpdate || _busy;
+
+    public string State => IsInstalled ? HasUpdate ? "Update available" : "Installed"
+        : Compatible ? $"Version {Manifest.ParsedVersion}" : "Needs a newer Aura";
+
+    public string ActionText => _busy ? IsInstalled ? "Updating…" : "Installing…"
+        : !Compatible ? "Needs a newer Aura"
+        : HasUpdate ? $"Update to {Manifest.ParsedVersion}" : "Install";
+
+    public string? Error
+    {
+        get => _error;
+        private set => Set(ref _error, value);
+    }
+
+    public static bool IsExpected(Exception exception) =>
+        exception is HttpRequestException or TaskCanceledException or InvalidDataException or IOException
+            or UnauthorizedAccessException or BadImageFormatException;
+
+    public async Task InstallAsync()
+    {
+        if (!CanInstall)
+            return;
+
+        _busy = true;
+        Error = null;
+        Refresh();
+
+        try
+        {
+            await App.Current.InstallAsync(Entry);
+        }
+        catch (Exception exception) when (IsExpected(exception))
+        {
+            Error = Marketplace.Describe(exception);
+            AppLog.For("Ui").Error($"Installing '{Manifest.InternalName}' failed.", exception);
+        }
+        finally
+        {
+            _busy = false;
+            Refresh();
+        }
+    }
+
+    public void Refresh()
+    {
+        foreach (var name in new[] { nameof(IsInstalled), nameof(HasUpdate), nameof(CanInstall), nameof(ShowsButton), nameof(State), nameof(ActionText) })
+            Raise(name);
+    }
 }
 
 public sealed record MarketDetailPage(CatalogItem Item);
@@ -673,15 +819,24 @@ public sealed class CategoryOption(string label, bool isChecked)
 
 public sealed class MarketPage : Observable
 {
+    private const string All = "All";
+
     private string _query = "";
-    private string _category = "All";
+    private string _category = All;
     private int _columns = 3;
+    private IReadOnlyList<CatalogEntry>? _catalog;
+    private IReadOnlyList<CatalogItem> _items = [];
     private IReadOnlyList<CatalogItem> _results = [];
+    private IReadOnlyList<CategoryOption> _categories = [new(All, true)];
+    private string? _notice;
+    private string _reposLabel = "Repos";
+    private bool _loading;
 
-    public MarketPage() => Filter();
-
-    public IReadOnlyList<CategoryOption> Categories { get; } =
-        [.. new[] { "All", "Video", "Music", "Anime", "Developer" }.Select(label => new CategoryOption(label, label == "All"))];
+    public IReadOnlyList<CategoryOption> Categories
+    {
+        get => _categories;
+        private set => Set(ref _categories, value);
+    }
 
     public string Query
     {
@@ -719,15 +874,191 @@ public sealed class MarketPage : Observable
         }
     }
 
-    public string? EmptyText => _results.Count > 0 ? null
-        : _query.Trim().Length > 0 ? $"No plugin matches “{_query.Trim()}”." : "No plugins in this category yet.";
+    public string? Notice
+    {
+        get => _notice;
+        private set => Set(ref _notice, value);
+    }
+
+    public string ReposLabel
+    {
+        get => _reposLabel;
+        private set => Set(ref _reposLabel, value);
+    }
+
+    public bool Loading
+    {
+        get => _loading;
+        private set
+        {
+            if (Set(ref _loading, value))
+                Raise(nameof(EmptyText));
+        }
+    }
+
+    public string? EmptyText => _results.Count > 0 || (_loading && _items.Count == 0) ? null
+        : _query.Trim().Length > 0 ? $"No plugin matches “{_query.Trim()}”."
+        : _items.Count == 0 ? "No plugins to show yet." : "No plugins in this category.";
+
+    public void Update(App app)
+    {
+        Loading = app.CatalogLoading;
+        Notice = NoticeFor(app.Repos, app.CatalogLoading);
+        ReposLabel = app.Market.CustomRepos.Count == 0 ? "Repos" : $"Repos · {app.Market.CustomRepos.Count + 1}";
+
+        if (ReferenceEquals(_catalog, app.Catalog))
+        {
+            foreach (var item in _items)
+                item.Refresh();
+
+            return;
+        }
+
+        _catalog = app.Catalog;
+        _items = [.. app.Catalog
+            .GroupBy(entry => entry.Manifest.InternalName, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new CatalogItem(Pick(app, [.. group])))
+            .OrderBy(item => item.ThirdParty).ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase)];
+
+        string[] labels = [All, .. _items.Select(item => item.Category).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.CurrentCultureIgnoreCase)];
+
+        if (!labels.Contains(_category))
+            _category = All;
+
+        Categories = [.. labels.Select(label => new CategoryOption(label, label == _category))];
+        Filter();
+    }
+
+    private static CatalogEntry Pick(App app, IReadOnlyList<CatalogEntry> entries)
+    {
+        var installed = app.Host.Plugins.FirstOrDefault(plugin =>
+            string.Equals(plugin.Manifest?.InternalName, entries[0].Manifest.InternalName, StringComparison.OrdinalIgnoreCase))?.Manifest;
+
+        return installed is null ? entries[0] : Marketplace.Source(installed, entries) ?? entries[0];
+    }
+
+    private static string? NoticeFor(IReadOnlyList<RepoResult> repos, bool loading)
+    {
+        if (repos.Count == 0)
+            return loading ? "Loading the plugin list…" : null;
+
+        if (repos.FirstOrDefault(repo => repo.Official) is { Error: { } error })
+            return $"Can’t load the official plugin list. {error} Installed plugins keep working." +
+                   (repos.Count > 1 ? " Custom repos wait until it loads." : "");
+
+        var failed = repos.Where(repo => repo.Error is not null).Select(repo => $"{repo.Name}: {repo.Error}").ToList();
+
+        return failed.Count == 0 ? null : string.Join("\n", failed);
+    }
 
     private void Filter()
     {
         var query = _query.Trim();
-        Results = [.. CatalogItem.All.Where(item =>
-            (_category == "All" || item.Category == _category) &&
+        Results = [.. _items.Where(item =>
+            (_category == All || string.Equals(item.Category, _category, StringComparison.OrdinalIgnoreCase)) &&
             (query.Length == 0 || item.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
              item.Blurb.Contains(query, StringComparison.OrdinalIgnoreCase)))];
     }
+}
+
+public sealed record RepoRow(string Name, string MetaUrl, string Status, bool Failed, bool Official);
+
+public sealed class ReposPage : Observable
+{
+    private string _url = "";
+    private string? _error;
+    private bool _busy;
+    private IReadOnlyList<RepoRow> _custom = [];
+    private RepoRow? _official;
+
+    public bool WarningAccepted => App.Current.Market.WarningAccepted;
+
+    public RepoRow? Official
+    {
+        get => _official;
+        private set => Set(ref _official, value);
+    }
+
+    public IReadOnlyList<RepoRow> Custom
+    {
+        get => _custom;
+        private set => Set(ref _custom, value);
+    }
+
+    public string Url
+    {
+        get => _url;
+        set => Set(ref _url, value);
+    }
+
+    public string? Error
+    {
+        get => _error;
+        private set => Set(ref _error, value);
+    }
+
+    public bool Busy
+    {
+        get => _busy;
+        private set
+        {
+            if (Set(ref _busy, value))
+                Raise(nameof(Idle));
+        }
+    }
+
+    public bool Idle => !_busy;
+
+    public void Accept()
+    {
+        App.Current.Market.WarningAccepted = true;
+        Raise(nameof(WarningAccepted));
+    }
+
+    public void Update(App app)
+    {
+        Official = Row(app.Repos.FirstOrDefault(repo => repo.Official), Marketplace.OfficialUrl, true);
+        Custom = [.. app.Market.CustomRepos.Select(url =>
+            Row(app.Repos.FirstOrDefault(repo => !repo.Official && repo.MetaUrl == url), url, false))];
+    }
+
+    public async Task AddAsync()
+    {
+        if (Busy || Url.Trim().Length == 0)
+            return;
+
+        Busy = true;
+        Error = null;
+
+        try
+        {
+            var result = await App.Current.Market.AddRepoAsync(Url);
+
+            if (result.Meta is null)
+            {
+                Error = result.Error;
+                return;
+            }
+
+            Url = "";
+            await App.Current.RefreshCatalogAsync();
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    public async Task RemoveAsync(RepoRow row)
+    {
+        App.Current.Market.RemoveRepo(row.MetaUrl);
+        await App.Current.RefreshCatalogAsync();
+    }
+
+    private static RepoRow Row(RepoResult? result, string url, bool official) => result switch
+    {
+        { Error: { } error } => new RepoRow(result.Name, url, error, true, official),
+        { Meta: { } meta } => new RepoRow(result.Name, url, meta.Plugins.Count == 1 ? "1 plugin" : $"{meta.Plugins.Count} plugins", false, official),
+        _ => new RepoRow(url, url, "Not loaded yet.", false, official)
+    };
 }

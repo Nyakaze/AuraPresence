@@ -5,6 +5,8 @@ namespace Aura.Presence.App.Plugins;
 
 public sealed class PluginLoadContext : AssemblyLoadContext
 {
+    private const string ServicesPrefix = "Aura.Presence.Services.";
+
     private static readonly string SdkAssemblyName = typeof(Sdk.IPresencePlugin).Assembly.GetName().Name!;
 
     private readonly AssemblyDependencyResolver _resolver;
@@ -15,9 +17,13 @@ public sealed class PluginLoadContext : AssemblyLoadContext
         _resolver = new AssemblyDependencyResolver(pluginAssemblyPath);
     }
 
+    public static bool IsShared(string? assemblyName) =>
+        assemblyName is not null &&
+        (assemblyName == SdkAssemblyName || assemblyName.StartsWith(ServicesPrefix, StringComparison.Ordinal));
+
     protected override Assembly? Load(AssemblyName assemblyName)
     {
-        if (string.Equals(assemblyName.Name, SdkAssemblyName, StringComparison.Ordinal))
+        if (IsShared(assemblyName.Name))
         {
             return null;
         }

@@ -23,6 +23,7 @@ public partial class App : Application
     private TrayIcon? _tray;
     private AuraWindow? _window;
     private int _refreshQueued;
+    private int _catalogRun;
 
     public static new App Current => (App)Application.Current;
 
@@ -31,6 +32,14 @@ public partial class App : Application
     public IPresenceOutput Output { get; private set; } = null!;
 
     public PluginHost Host { get; private set; } = null!;
+
+    public Marketplace Market { get; private set; } = null!;
+
+    public IReadOnlyList<RepoResult> Repos { get; private set; } = [];
+
+    public IReadOnlyList<CatalogEntry> Catalog { get; private set; } = [];
+
+    public bool CatalogLoading { get; private set; }
 
     public static void OpenFolder(string path) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
 
@@ -64,6 +73,59 @@ public partial class App : Application
         QueueRefresh();
     }
 
+    public CatalogEntry? UpdateFor(LoadedPlugin loaded) =>
+        loaded.Manifest is { } manifest ? Marketplace.UpdateFor(manifest, Catalog) : null;
+
+    public async Task RefreshCatalogAsync()
+    {
+        var run = ++_catalogRun;
+        CatalogLoading = true;
+        QueueRefresh();
+
+        try
+        {
+            var repos = await Market.FetchAsync();
+
+            if (run == _catalogRun)
+            {
+                Repos = repos;
+                Catalog = Marketplace.Merge(repos);
+            }
+        }
+        finally
+        {
+            if (run == _catalogRun)
+            {
+                CatalogLoading = false;
+                QueueRefresh();
+            }
+        }
+    }
+
+    public async Task InstallAsync(CatalogEntry entry)
+    {
+        var name = entry.Manifest.InternalName;
+        var zip = await Marketplace.DownloadAsync(entry.Manifest);
+        var folder = await Task.Run(() => PluginStore.Install(zip, entry.Manifest with { InstalledFrom = entry.Repo.MetaUrl }, AppPaths.Plugins));
+        var previous = Host.Plugins.Where(plugin => string.Equals(plugin.Manifest?.InternalName, name, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        await Host.RemoveAsync(previous);
+        await Host.AddAsync(PluginLoader.Load(Path.Combine(folder, name + ".dll")));
+        _log.Info($"Installed '{name}' {entry.Manifest.Version} from '{entry.Repo.MetaUrl}'.");
+        QueueRefresh();
+    }
+
+    public async Task UninstallAsync(LoadedPlugin loaded)
+    {
+        if (loaded.Manifest is null || loaded.Folder is null)
+            return;
+
+        await Host.RemoveAsync(Host.Plugins.Where(plugin => plugin.Folder == loaded.Folder).ToList());
+        PluginStore.ScheduleDeletion(loaded.Folder);
+        _log.Info($"Uninstalled '{loaded.Manifest.InternalName}'; its files go when Aura next starts.");
+        QueueRefresh();
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         _instance = new Mutex(true, InstanceName, out var first);
@@ -90,7 +152,9 @@ public partial class App : Application
 
         Arbiter = new ActivityArbiter();
         Output = new DiscordPresenceOutput();
-        Host = new PluginHost(Arbiter, new JsonSettings(AppPaths.SettingsFile));
+        var settings = new JsonSettings(AppPaths.SettingsFile);
+        Host = new PluginHost(Arbiter, settings);
+        Market = new Marketplace(settings);
 
         _openSignal = new EventWaitHandle(false, EventResetMode.AutoReset, OpenSignalName);
         _openWait = ThreadPool.RegisterWaitForSingleObject(_openSignal, (_, _) => Dispatcher.InvokeAsync(OpenWindow),
@@ -128,8 +192,14 @@ public partial class App : Application
 
     private async Task StartPluginsAsync()
     {
-        _log.Info("Aura started.");
-        await Host.StartAsync(AppPaths.Plugins);
+        _log.Info($"Aura started (API {PluginStore.ApiVersion.ToString(2)}).");
+        await Host.StartAsync(PluginLoader.LoadAll(AppPaths.DevPlugins, AppPaths.Plugins));
+
+        using var daily = new PeriodicTimer(TimeSpan.FromHours(24));
+
+        do
+            await RefreshCatalogAsync();
+        while (await daily.WaitForNextTickAsync());
     }
 
     private void QueueRefresh()

@@ -12,6 +12,10 @@ public sealed class LoadedPlugin(IPresencePlugin plugin, PluginContext context, 
     public bool Enabled { get; set; } = enabled;
 
     public string Id => Plugin.Id;
+
+    public string? Folder { get; } = PluginStore.FolderOf(plugin);
+
+    public PluginManifest? Manifest { get; } = PluginStore.FolderOf(plugin) is { } folder ? PluginStore.Read(folder) : null;
 }
 
 public sealed class PluginHost : IAsyncDisposable
@@ -40,17 +44,17 @@ public sealed class PluginHost : IAsyncDisposable
 
     public IReadOnlyList<LoadedPlugin> Plugins => _plugins;
 
-    public Task StartAsync(string pluginsDirectory) => StartAsync(PluginLoader.LoadAll(pluginsDirectory));
+    public Task StartAsync(IEnumerable<IPresencePlugin> plugins) => AddAsync(plugins);
 
-    public async Task StartAsync(IEnumerable<IPresencePlugin> plugins)
+    public Task AddAsync(IEnumerable<IPresencePlugin> plugins) => Serialized(async () =>
     {
         var disabled = _settings.Get<string[]>(DisabledPluginsSetting, []).ToHashSet(StringComparer.Ordinal);
         var order = _settings.Get<string[]>(OrderSetting, []);
-        var loaded = new List<LoadedPlugin>();
+        var added = new List<LoadedPlugin>();
 
         foreach (var plugin in plugins)
         {
-            if (loaded.Any(existing => existing.Id == plugin.Id))
+            if (_plugins.Concat(added).Any(existing => existing.Id == plugin.Id))
             {
                 _log.Warn($"Duplicate plugin id '{plugin.Id}' ignored.");
                 continue;
@@ -58,13 +62,13 @@ public sealed class PluginHost : IAsyncDisposable
 
             var context = new PluginContext(plugin, _arbiter, _mediaBus);
             context.HealthChanged += (_, _) => Changed?.Invoke();
-            loaded.Add(new LoadedPlugin(plugin, context, !disabled.Contains(plugin.Id)));
+            added.Add(new LoadedPlugin(plugin, context, !disabled.Contains(plugin.Id)));
         }
 
-        _plugins = [.. loaded.OrderBy(plugin => Position(order, plugin.Id)).ThenByDescending(plugin => plugin.Plugin.DefaultPriority)];
+        _plugins = [.. _plugins.Concat(added).OrderBy(plugin => Position(order, plugin.Id)).ThenByDescending(plugin => plugin.Plugin.DefaultPriority)];
         _arbiter.SetOrder(_plugins.Select(plugin => plugin.Id));
 
-        foreach (var plugin in _plugins)
+        foreach (var plugin in added)
         {
             if (plugin.Enabled)
                 await StartPluginAsync(plugin);
@@ -73,7 +77,18 @@ public sealed class PluginHost : IAsyncDisposable
         }
 
         Changed?.Invoke();
-    }
+    });
+
+    public Task RemoveAsync(IReadOnlyCollection<LoadedPlugin> plugins) => Serialized(async () =>
+    {
+        foreach (var plugin in plugins.Where(plugin => plugin.Enabled))
+            await StopPluginAsync(plugin);
+
+        _plugins = [.. _plugins.Except(plugins)];
+        _arbiter.SetOrder(_plugins.Select(plugin => plugin.Id));
+        _log.Info($"Removed {string.Join(", ", plugins.Select(plugin => $"'{plugin.Id}'"))}.");
+        Changed?.Invoke();
+    });
 
     public Task SetEnabledAsync(LoadedPlugin loaded, bool enabled) => Serialized(async () =>
     {
@@ -101,7 +116,7 @@ public sealed class PluginHost : IAsyncDisposable
 
     public Task RestartAsync(LoadedPlugin loaded) => Serialized(async () =>
     {
-        if (!loaded.Enabled)
+        if (!loaded.Enabled || !_plugins.Contains(loaded))
             return;
 
         await StopPluginAsync(loaded);

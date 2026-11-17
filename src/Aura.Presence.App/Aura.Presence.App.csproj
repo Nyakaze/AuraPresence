@@ -14,6 +14,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Aura.Presence.Sdk\Aura.Presence.Sdk.csproj" />
+    <ProjectReference Include="..\..\services\Aura.Presence.Services.AniList\Aura.Presence.Services.AniList.csproj" />
+    <ProjectReference Include="..\..\services\Aura.Presence.Services.Chromium\Aura.Presence.Services.Chromium.csproj" />
+    <ProjectReference Include="..\..\services\Aura.Presence.Services.Cinemeta\Aura.Presence.Services.Cinemeta.csproj" />
     <ProjectReference Include="..\..\..\Corvus\Crovus\Crovus.csproj" />
   </ItemGroup>
 

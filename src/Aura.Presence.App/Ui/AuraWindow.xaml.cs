@@ -13,6 +13,7 @@ public partial class AuraWindow : Window
 {
     private readonly MainModel _model = new();
     private readonly MarketPage _market = new();
+    private readonly ReposPage _repos = new();
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
     private bool _dragging;
 
@@ -34,6 +35,11 @@ public partial class AuraWindow : Window
             return;
 
         _model.Update(App.Current);
+        _market.Update(App.Current);
+        _repos.Update(App.Current);
+
+        if (Page.Content is MarketDetailPage detail)
+            detail.Item.Refresh();
 
         if (Page.Content is not PluginPage { IsCurrent: false } page)
             return;
@@ -116,9 +122,56 @@ public partial class AuraWindow : Window
 
     private void InstalledTab_Click(object sender, RoutedEventArgs e) => Navigate(_model);
 
-    private void MarketTab_Click(object sender, RoutedEventArgs e) => Navigate(_market);
+    private void MarketTab_Click(object sender, RoutedEventArgs e)
+    {
+        Navigate(_market);
+        _ = App.Current.RefreshCatalogAsync();
+    }
 
-    private void Back_Click(object sender, RoutedEventArgs e) => Navigate(Page.Content is MarketDetailPage ? _market : _model);
+    private void Back_Click(object sender, RoutedEventArgs e) => Navigate(Page.Content is MarketDetailPage or ReposPage ? _market : _model);
+
+    private void Repos_Click(object sender, RoutedEventArgs e) => Navigate(_repos);
+
+    private async void Install_Click(object sender, RoutedEventArgs e) => await ItemOf<CatalogItem>(sender).InstallAsync();
+
+    private void AcceptRepos_Click(object sender, RoutedEventArgs e) => _repos.Accept();
+
+    private async void AddRepo_Click(object sender, RoutedEventArgs e) => await _repos.AddAsync();
+
+    private async void RepoUrl_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+
+        ((TextBox)sender).GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        await _repos.AddAsync();
+    }
+
+    private async void RemoveRepo_Click(object sender, RoutedEventArgs e) => await _repos.RemoveAsync(ItemOf<RepoRow>(sender));
+
+    private void Uninstall_Click(object sender, RoutedEventArgs e)
+    {
+        if (Page.Content is PluginPage page)
+            page.Confirming = true;
+    }
+
+    private void UninstallCancel_Click(object sender, RoutedEventArgs e)
+    {
+        if (Page.Content is PluginPage page)
+            page.Confirming = false;
+    }
+
+    private async void UninstallConfirm_Click(object sender, RoutedEventArgs e)
+    {
+        if (Page.Content is PluginPage page && await page.RunAsync(() => App.Current.UninstallAsync(page.Plugin.Loaded)))
+            Navigate(_model);
+    }
+
+    private async void PluginUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (Page.Content is PluginPage { Plugin.AvailableUpdate: { } update } page && await page.RunAsync(() => App.Current.InstallAsync(update)))
+            Navigate(_model);
+    }
 
     private void Open_Click(object sender, RoutedEventArgs e) => Navigate(new PluginPage(ItemOf<PluginItem>(sender)));
 
