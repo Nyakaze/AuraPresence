@@ -18,21 +18,27 @@ public sealed class TrayContext : ApplicationContext
     private readonly ToolStripMenuItem _discordItem;
     private readonly ToolStripMenuItem _statusItem;
     private readonly ToolStripMenuItem _pluginsItem;
+    private readonly ToolStripMenuItem _autostartItem;
 
     public TrayContext()
     {
         _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
-        _host = new PluginHost(_arbiter);
+        _host = new PluginHost(_arbiter, new JsonPluginSettings(Path.Combine(AppPaths.DataRoot, "settings.json")));
 
         _discordItem = new ToolStripMenuItem(_output.Status.Summary) { Enabled = false };
         _statusItem = new ToolStripMenuItem("Nothing to show") { Enabled = false };
         _pluginsItem = new ToolStripMenuItem("Plugins");
+        _autostartItem = new ToolStripMenuItem("Start with Windows", null, (_, _) => ToggleAutostart())
+        {
+            Checked = Autostart.IsEnabled
+        };
 
         var menu = new ContextMenuStrip();
         menu.Items.Add(_discordItem);
         menu.Items.Add(_statusItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_pluginsItem);
+        menu.Items.Add(_autostartItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Open logs folder", null, (_, _) => OpenFolder(AppPaths.Logs));
         menu.Items.Add("Exit", null, async (_, _) => await ExitAsync());
@@ -94,11 +100,37 @@ public sealed class TrayContext : ApplicationContext
 
         foreach (var loaded in _host.Plugins)
         {
-            var health = loaded.Context.Health;
             var message = loaded.Context.HealthMessage;
-            var text = $"{loaded.Plugin.DisplayName} — {health}{(message is null ? "" : $": {message}")}";
-            _pluginsItem.DropDownItems.Add(new ToolStripMenuItem(text) { Enabled = false });
+            var text = loaded.Enabled
+                ? $"{loaded.Plugin.DisplayName} — {loaded.Context.Health}{(message is null ? "" : $": {message}")}"
+                : $"{loaded.Plugin.DisplayName} — off";
+
+            _pluginsItem.DropDownItems.Add(new ToolStripMenuItem(text, null, async (_, _) => await TogglePluginAsync(loaded))
+            {
+                Checked = loaded.Enabled
+            });
         }
+    }
+
+    private async Task TogglePluginAsync(LoadedPlugin loaded)
+    {
+        await _host.SetEnabledAsync(loaded, !loaded.Enabled);
+        RebuildPluginMenu();
+    }
+
+    private void ToggleAutostart()
+    {
+        try
+        {
+            Autostart.SetEnabled(!Autostart.IsEnabled);
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            _log.Error("Changing 'Start with Windows' failed.", exception);
+        }
+
+        _autostartItem.Checked = Autostart.IsEnabled;
+        _log.Info($"Start with Windows: {(_autostartItem.Checked ? "on" : "off")}.");
     }
 
     private static void OpenFolder(string path)

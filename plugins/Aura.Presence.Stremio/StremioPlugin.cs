@@ -30,6 +30,7 @@ public sealed partial class StremioPlugin : IPresencePlugin
     private DateTimeOffset _firstSeen;
     private LibraryEntry? _entry;
     private string? _previousVideoId;
+    private string? _previousFileName;
     private int _missingPolls;
     private ShownState? _shown;
     private DateTimeOffset _publishedAt;
@@ -113,6 +114,7 @@ public sealed partial class StremioPlugin : IPresencePlugin
         if (playback.FileName != _fileName)
         {
             _previousVideoId = _entry?.VideoId ?? _previousVideoId;
+            _previousFileName = _fileName ?? _previousFileName;
             _fileName = playback.FileName;
             _release = ReleaseName.Parse(playback.FileName);
             _firstSeen = DateTimeOffset.UtcNow;
@@ -151,7 +153,9 @@ public sealed partial class StremioPlugin : IPresencePlugin
             return;
         }
 
-        if (latest is null || !StremioLibrary.Matches(latest, _release!, _firstSeen, _previousVideoId, _lookup?.Title))
+        var excludedVideoId = _fileName == _previousFileName ? null : _previousVideoId;
+
+        if (latest is null || !StremioLibrary.Matches(latest, _release!, _firstSeen, excludedVideoId, _lookup?.Title))
             return;
 
         _entry = latest;
@@ -387,6 +391,7 @@ public sealed partial class StremioPlugin : IPresencePlugin
     private async Task ClearAsync()
     {
         _previousVideoId = _entry?.VideoId ?? _previousVideoId;
+        _previousFileName = _fileName ?? _previousFileName;
         _fileName = null;
         _release = null;
         _entry = null;
