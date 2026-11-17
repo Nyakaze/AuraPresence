@@ -14,8 +14,6 @@ public sealed record PresenceImage(string Key, string? Text = null);
 
 public sealed record PresenceActivity
 {
-    public required string ApplicationId { get; init; }
-
     public ActivityKind Kind { get; init; } = ActivityKind.Playing;
 
     public string? Name { get; init; }

@@ -40,14 +40,6 @@ public static class ActivityMapper
         };
     }
 
-    public static bool TryParseApplicationId(string applicationId, out Snowflake snowflake)
-    {
-        var parsed = ulong.TryParse(applicationId, out var value) && value > 0;
-        snowflake = parsed ? new Snowflake(value) : default;
-
-        return parsed;
-    }
-
     private static RichPresenceAssets? Assets(PresenceImage? large, PresenceImage? small)
     {
         var largeKey = ImageKey(large);

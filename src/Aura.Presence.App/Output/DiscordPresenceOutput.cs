@@ -7,12 +7,13 @@ namespace Aura.Presence.App.Output;
 
 public sealed class DiscordPresenceOutput : IPresenceOutput
 {
+    private static readonly Snowflake AuraApplication = new(1516903509058916543);
+
     private readonly AppLog _log = AppLog.For("Discord");
     private readonly CrovusLogBridge _crovusLog = new("Crovus");
     private readonly Lock _gate = new();
-    private readonly Dictionary<Snowflake, RichPresenceClient> _clients = [];
 
-    private Snowflake? _activeApplication;
+    private RichPresenceClient? _client;
     private OutputStatus _status = OutputStatus.Idle;
     private OutputStatus? _rejection;
 
@@ -32,20 +33,9 @@ public sealed class DiscordPresenceOutput : IPresenceOutput
         if (claim is null)
         {
             lock (_gate)
-            {
-                foreach (var client in _clients.Values)
-                    client.ClearActivity();
-            }
+                _client?.ClearActivity();
 
             _log.Info("Presence cleared.");
-
-            return;
-        }
-
-        if (!ActivityMapper.TryParseApplicationId(claim.Activity.ApplicationId, out var applicationId))
-        {
-            _log.Error($"Plugin '{claim.SourceId}' reported an invalid Discord application id '{claim.Activity.ApplicationId}'.");
-            Publish(new OutputStatus($"Discord: plugin '{claim.SourceId}' has an invalid app id", false));
 
             return;
         }
@@ -63,46 +53,38 @@ public sealed class DiscordPresenceOutput : IPresenceOutput
         lock (_gate)
         {
             _rejection = null;
-            _activeApplication = applicationId;
-
-            foreach (var (id, other) in _clients)
-            {
-                if (id != applicationId)
-                    other.ClearActivity();
-            }
-
-            ClientFor(applicationId).SetActivity(activity);
+            Client().SetActivity(activity);
         }
 
-        _log.Info($"Showing '{claim.SourceId}': {activity.Type} | {activity.Details} | {activity.State}");
+        _log.Info($"Showing '{claim.SourceId}': {activity.Type} {activity.Name} | {activity.Details} | {activity.State}");
         RefreshStatus();
     }
 
     public async ValueTask DisposeAsync()
     {
-        RichPresenceClient[] clients;
+        RichPresenceClient? client;
 
         lock (_gate)
         {
-            clients = [.. _clients.Values];
-            _clients.Clear();
+            client = _client;
+            _client = null;
         }
 
-        foreach (var client in clients)
+        if (client is not null)
             await client.DisposeAsync();
     }
 
-    private RichPresenceClient ClientFor(Snowflake applicationId)
+    private RichPresenceClient Client()
     {
-        if (_clients.TryGetValue(applicationId, out var existing))
-            return existing;
+        if (_client is not null)
+            return _client;
 
-        var client = new RichPresenceClient(RichPresenceClientOptions.For(applicationId), _crovusLog);
+        var client = new RichPresenceClient(RichPresenceClientOptions.For(AuraApplication), _crovusLog);
         client.StateChanged += _ => RefreshStatus();
         client.ActivityApplied += _ => OnApplied();
-        client.ActivityRejected += failure => OnRejected(applicationId, failure);
+        client.ActivityRejected += OnRejected;
 
-        _clients[applicationId] = client;
+        _client = client;
         _ = client.StartAsync();
 
         return client;
@@ -116,9 +98,9 @@ public sealed class DiscordPresenceOutput : IPresenceOutput
         RefreshStatus();
     }
 
-    private void OnRejected(Snowflake applicationId, RichPresenceFailure failure)
+    private void OnRejected(RichPresenceFailure failure)
     {
-        _log.Warn($"Discord rejected the activity for app {applicationId}: {failure.Message}");
+        _log.Warn($"Discord rejected the activity: {failure.Message}");
 
         lock (_gate)
             _rejection = new OutputStatus($"Discord rejected the activity: {failure.Message}", false);
@@ -131,14 +113,7 @@ public sealed class DiscordPresenceOutput : IPresenceOutput
         OutputStatus next;
 
         lock (_gate)
-        {
-            if (_rejection is not null)
-                next = _rejection;
-            else if (_activeApplication is { } active && _clients.TryGetValue(active, out var client))
-                next = Describe(client);
-            else
-                next = OutputStatus.Idle;
-        }
+            next = _rejection ?? (_client is { } client ? Describe(client) : OutputStatus.Idle);
 
         Publish(next);
     }
@@ -168,7 +143,7 @@ public sealed class DiscordPresenceOutput : IPresenceOutput
             { Kind: RichPresenceFailureKind.AccessDenied } => new OutputStatus(
                 "Discord: access denied — Discord runs as administrator, Aura does not", false),
             { Kind: RichPresenceFailureKind.HandshakeRejected } failure => new OutputStatus(
-                $"Discord: app id rejected ({failure.Message})", false),
+                $"Discord: Aura's app id was rejected ({failure.Message})", false),
             { } failure => new OutputStatus($"Discord: {failure.Message}", false)
         };
     }

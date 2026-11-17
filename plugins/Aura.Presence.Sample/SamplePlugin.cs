@@ -4,28 +4,25 @@ namespace Aura.Presence.Sample;
 
 public sealed class SamplePlugin : IPresencePlugin
 {
-    public const string ApplicationIdVariable = "AURA_SAMPLE_APP_ID";
+    public const string EnableVariable = "AURA_SAMPLE";
 
     public string Id => "sample";
 
     public string DisplayName => "Sample";
 
-    public string Description => $"A test plugin to copy when you build your own. It reports one fixed activity while {ApplicationIdVariable} is set.";
+    public string Description => $"A test plugin to copy when you build your own. It reports one fixed activity while {EnableVariable} is set.";
 
     public async Task StartAsync(IPluginContext context, CancellationToken cancellationToken)
     {
-        var applicationId = Environment.GetEnvironmentVariable(ApplicationIdVariable);
-
-        if (string.IsNullOrWhiteSpace(applicationId))
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(EnableVariable)))
         {
-            context.ReportHealth(PluginHealth.Waiting, $"Inactive; set {ApplicationIdVariable} to enable it.");
+            context.ReportHealth(PluginHealth.Waiting, $"Inactive; set {EnableVariable} to enable it.");
 
             return;
         }
 
         await context.Activity.ReportAsync(new PresenceActivity
         {
-            ApplicationId = applicationId,
             Kind = ActivityKind.Playing,
             Details = "Testing Aura",
             State = "Sample plugin",

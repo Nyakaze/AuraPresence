@@ -60,8 +60,8 @@ Check(Marketplace.Merge([official with { Meta = null, Error = "down" }, custom])
 var installedExtra = Entry("Extra", "1.0.0") with { InstalledFrom = custom.MetaUrl };
 Check(Marketplace.UpdateFor(installedExtra, catalog, new Version(1, 1))?.Repo == custom, "updates come from the repo it was installed from");
 Check(Marketplace.UpdateFor(installedExtra, catalog, new Version(1, 0)) is null, "an update needing a newer API isn't offered");
-Check(Marketplace.UpdateFor(Entry("Stremio", "1.0.0") with { InstalledFrom = custom.MetaUrl }, catalog) is null, "no update when versions match");
-Check(Marketplace.UpdateFor(Entry("Stremio", "0.9.0") with { InstalledFrom = custom.MetaUrl }, catalog)?.Repo.Official == true, "the official repo can always update");
+Check(Marketplace.UpdateFor(Entry("Stremio", "1.0.0") with { InstalledFrom = custom.MetaUrl }, catalog, api) is null, "no update when versions match");
+Check(Marketplace.UpdateFor(Entry("Stremio", "0.9.0") with { InstalledFrom = custom.MetaUrl }, catalog, api)?.Repo.Official == true, "the official repo can always update");
 
 var root = Path.Combine(Path.GetTempPath(), $"aura-market-checks-{Guid.NewGuid():N}");
 var assemblyBytes = File.ReadAllBytes(typeof(IPresencePlugin).Assembly.Location);

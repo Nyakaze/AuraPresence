@@ -90,7 +90,7 @@ abstract class Probe : IPresencePlugin
     {
         Started = true;
         Label = context.Settings.Get("label", "default");
-        await context.Activity.ReportAsync(new PresenceActivity { ApplicationId = "1", Details = Label });
+        await context.Activity.ReportAsync(new PresenceActivity { Details = Label });
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
