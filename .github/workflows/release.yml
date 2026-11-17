@@ -1,0 +1,67 @@
+name: Release Aura
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency: release
+
+env:
+  CROVUS_REF: d6df9aa443371f350da03da46f8a52346e684418
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: AuraPresence
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/Crovus
+          ref: ${{ env.CROVUS_REF }}
+          path: Corvus/Crovus
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Run the checks
+        working-directory: AuraPresence/tests
+        run: |
+          dotnet run HostChecks.cs
+          dotnet run MarketChecks.cs
+
+      - name: Publish
+        working-directory: AuraPresence
+        run: dotnet publish src/Aura.Presence.App -c Release -o out/AuraPresence --nologo
+
+      - name: Package and release
+        working-directory: AuraPresence
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          $version = $env:TAG.TrimStart('v')
+          $built = (Get-Item out/AuraPresence/AuraPresence.dll).VersionInfo.FileVersion
+          if ($built -ne "$version.0") { throw "The build is $built, but the tag is $env:TAG." }
+          $zip = "AuraPresence-$version.zip"
+          Compress-Archive -Path out/AuraPresence/* -DestinationPath $zip
+          $update = [ordered]@{
+            version     = $version
+            downloadUrl = "https://github.com/$env:REPOSITORY/releases/download/$env:TAG/$zip"
+            sha256      = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+            size        = (Get-Item $zip).Length
+          }
+          $update | ConvertTo-Json | Set-Content update.json -Encoding utf8NoBOM
+          gh release create $env:TAG $zip update.json --title "Aura $version" --notes "Aura $version. Aura installs this update itself: click Update in the window or the tray."

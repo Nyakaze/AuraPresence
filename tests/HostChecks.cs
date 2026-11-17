@@ -1,4 +1,4 @@
-#:property TargetFramework=net10.0-windows
+#:property TargetFramework=net10.0-windows10.0.19041.0
 #:property UseWPF=true
 #:property PublishAot=false
 #:project ../src/Aura.Presence.App/Aura.Presence.App.csproj

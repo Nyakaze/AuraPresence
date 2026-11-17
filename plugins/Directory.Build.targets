@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <AuraAppPluginDir>$(MSBuildThisFileDirectory)..\src\Aura.Presence.App\bin\$(Configuration)\net10.0-windows\plugins\$(MSBuildProjectName)\</AuraAppPluginDir>
+    <AuraAppPluginDir>$(MSBuildThisFileDirectory)..\src\Aura.Presence.App\bin\$(Configuration)\net10.0-windows10.0.19041.0\plugins\$(MSBuildProjectName)\</AuraAppPluginDir>
     <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
 

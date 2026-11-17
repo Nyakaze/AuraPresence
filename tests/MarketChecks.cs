@@ -1,4 +1,4 @@
-#:property TargetFramework=net10.0-windows
+#:property TargetFramework=net10.0-windows10.0.19041.0
 #:property UseWPF=true
 #:property PublishAot=false
 #:project ../src/Aura.Presence.App/Aura.Presence.App.csproj
@@ -6,6 +6,7 @@
 using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using Aura.Presence.App;
 using Aura.Presence.App.Plugins;
 using Aura.Presence.Sdk;
 
@@ -38,6 +39,10 @@ var api = new Version(1, 2);
 Check(PluginStore.IsCompatible("1.0", api) && PluginStore.IsCompatible("1.2", api), "older or equal API minors are compatible");
 Check(!PluginStore.IsCompatible("1.3", api) && !PluginStore.IsCompatible("2.0", api) && !PluginStore.IsCompatible("0.9", api) && !PluginStore.IsCompatible(null, api),
     "newer minors, other majors and missing versions are not");
+
+Check(new[] { "Aura.Presence.Sdk", "Aura.Presence.Services.AniList", "WinRT.Runtime", "Microsoft.Windows.SDK.NET" }.All(PluginLoadContext.IsShared) &&
+      !PluginLoadContext.IsShared("Snappier") && !PluginLoadContext.IsShared("Aura.Presence.Stremio"),
+    "plugins share the Aura API and the Windows Runtime with Aura, and nothing else");
 
 Check(Marketplace.CheckRepoUrl("http://example.org/meta.json", []) is not null, "custom repos must be https");
 Check(Marketplace.CheckRepoUrl(Marketplace.OfficialUrl, []) is not null, "the official repo can't be added as a custom one");
@@ -139,6 +144,39 @@ Check(PluginStore.Install(zip, For(zip, assemblyVersion), root) == folder && Plu
 PluginStore.ScheduleDeletion(folder);
 Check(PluginStore.Cleanup(root).Count == 0 && !Directory.Exists(Path.Combine(root, "Fake.Plugin")), "cleanup deletes a scheduled plugin");
 
+var release = AppUpdater.Parse($$"""{ "version": "{{assemblyVersion}}", "downloadUrl": "https://example.org/Aura.zip", "sha256": "{{sha}}", "size": 5, "extra": true }""");
+Check(release.ParsedVersion.ToString() == assemblyVersion, "the update file parses");
+Check(Refused(() => AppUpdater.Parse($$"""{ "version": "9.0.0", "downloadUrl": "http://example.org/Aura.zip", "sha256": "{{sha}}" }""")) &&
+      Refused(() => AppUpdater.Parse("""{ "version": "9.0.0", "downloadUrl": "https://example.org/Aura.zip", "sha256": "short" }""")),
+    "an update must be https and carry a checksum");
+
+var install = Path.Combine(root, "install");
+var staging = Path.Combine(root, "staging");
+Directory.CreateDirectory(install);
+File.WriteAllText(Path.Combine(install, "AuraPresence.exe"), "old exe");
+File.WriteAllText(Path.Combine(install, "Kept.txt"), "kept");
+File.WriteAllBytes(Path.Combine(install, "Loaded.dll"), assemblyBytes);
+var inUse = new FileStream(Path.Combine(install, "Loaded.dll"), FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+
+var build = Zip(("AuraPresence.exe", "new exe"u8.ToArray()), ("AuraPresence.dll", assemblyBytes), ("Loaded.dll", assemblyBytes),
+    ("runtimes/win/new.txt", "new"u8.ToArray()));
+AppRelease ReleaseOf(byte[] bytes, string version) => new() { Version = version, DownloadUrl = "https://example.org/Aura.zip", Sha256 = Convert.ToHexString(SHA256.HashData(bytes)) };
+
+Check(Refused(() => AppUpdater.Apply(build, ReleaseOf(build, assemblyVersion) with { Sha256 = sha }, install, staging)), "an update with the wrong checksum is refused");
+Check(Refused(() => AppUpdater.Apply(build, ReleaseOf(build, "9.9.9"), install, staging)), "an update whose version differs from the release is refused");
+Check(Refused(() => AppUpdater.Apply(empty, ReleaseOf(empty, assemblyVersion), install, staging)), "a zip that isn't an Aura build is refused");
+Check(File.ReadAllText(Path.Combine(install, "AuraPresence.exe")) == "old exe", "a refused update changes nothing");
+
+AppUpdater.Apply(build, ReleaseOf(build, assemblyVersion), install, staging);
+Check(File.ReadAllText(Path.Combine(install, "AuraPresence.exe")) == "new exe" && File.Exists(Path.Combine(install, "runtimes", "win", "new.txt")),
+    "an update replaces and adds files");
+Check(File.Exists(Path.Combine(install, "Loaded.dll.old")) && File.Exists(Path.Combine(install, "Loaded.dll")), "a file in use is moved aside, not overwritten");
+Check(File.Exists(Path.Combine(install, "Kept.txt")) && !Directory.Exists(staging), "other files stay and the staging folder goes");
+
+AppUpdater.RemoveOldFiles(install);
+Check(!File.Exists(Path.Combine(install, "AuraPresence.exe.old")), "old files are removed on the next start");
+
+inUse.Dispose();
 Directory.Delete(root, recursive: true);
 Console.WriteLine("All marketplace checks passed.");
 

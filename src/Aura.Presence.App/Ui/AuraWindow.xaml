@@ -648,6 +648,8 @@
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,20,0">
                     <Path Data="{StaticResource G.Ring}" Fill="{StaticResource Action}" Width="20" Height="20" Stretch="Uniform" />
                     <TextBlock Text="Aura" FontSize="17" FontWeight="SemiBold" Margin="10,0,0,0" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding AppVersion}" FontFamily="{StaticResource MonoFont}" FontSize="12" Foreground="{StaticResource Muted}"
+                               Margin="8,3,0,0" VerticalAlignment="Center" />
                 </StackPanel>
                 <RadioButton x:Name="InstalledTab" DockPanel.Dock="Left" Style="{StaticResource Tab}" GroupName="Tabs"
                              WindowChrome.IsHitTestVisibleInChrome="True"
@@ -696,6 +698,12 @@
                         <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.FolderOpen}" />
                     </Button>
                 </StackPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource Button.Primary}" Height="30" Padding="14,0" FontSize="13" Margin="0,0,16,0"
+                        VerticalAlignment="Center" Click="UpdateAura_Click" IsEnabled="{Binding CanUpdate}" ToolTip="{Binding UpdateTip}"
+                        Visibility="{Binding UpdateText, Converter={StaticResource Shown}}" WindowChrome.IsHitTestVisibleInChrome="True"
+                        AutomationProperties.Name="{Binding UpdateText}">
+                    <TextBlock Text="{Binding UpdateText}" />
+                </Button>
                 <Border />
             </DockPanel>
         </Border>

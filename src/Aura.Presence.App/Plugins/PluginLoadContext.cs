@@ -7,7 +7,12 @@ public sealed class PluginLoadContext : AssemblyLoadContext
 {
     private const string ServicesPrefix = "Aura.Presence.Services.";
 
-    private static readonly string SdkAssemblyName = typeof(Sdk.IPresencePlugin).Assembly.GetName().Name!;
+    private static readonly HashSet<string> SharedAssemblies =
+    [
+        typeof(Sdk.IPresencePlugin).Assembly.GetName().Name!,
+        "WinRT.Runtime",
+        "Microsoft.Windows.SDK.NET"
+    ];
 
     private readonly AssemblyDependencyResolver _resolver;
 
@@ -19,14 +24,12 @@ public sealed class PluginLoadContext : AssemblyLoadContext
 
     public static bool IsShared(string? assemblyName) =>
         assemblyName is not null &&
-        (assemblyName == SdkAssemblyName || assemblyName.StartsWith(ServicesPrefix, StringComparison.Ordinal));
+        (SharedAssemblies.Contains(assemblyName) || assemblyName.StartsWith(ServicesPrefix, StringComparison.Ordinal));
 
     protected override Assembly? Load(AssemblyName assemblyName)
     {
         if (IsShared(assemblyName.Name))
-        {
-            return null;
-        }
+            return Default.LoadFromAssemblyName(new AssemblyName(assemblyName.Name!));
 
         var path = _resolver.ResolveAssemblyToPath(assemblyName);
         return path is null ? null : LoadFromAssemblyPath(path);

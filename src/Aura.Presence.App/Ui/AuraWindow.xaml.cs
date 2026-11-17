@@ -132,6 +132,8 @@ public partial class AuraWindow : Window
 
     private void Repos_Click(object sender, RoutedEventArgs e) => Navigate(_repos);
 
+    private async void UpdateAura_Click(object sender, RoutedEventArgs e) => await App.Current.UpdateAuraAsync();
+
     private void BrowseMarket_Click(object sender, RoutedEventArgs e)
     {
         MarketTab.IsChecked = true;

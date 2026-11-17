@@ -79,12 +79,7 @@ public sealed class Marketplace(JsonSettings settings)
     {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.CacheControl = new() { NoCache = true };
-            using var response = await Http.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-
-            return new RepoResult(url, official, Parse(await response.Content.ReadAsStringAsync(cancellationToken), url), null);
+            return new RepoResult(url, official, Parse(await GetStringAsync(url, cancellationToken), url), null);
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException or InvalidDataException)
         {
@@ -162,14 +157,27 @@ public sealed class Marketplace(JsonSettings settings)
             ? source
             : null;
 
-    public static async Task<byte[]> DownloadAsync(PluginManifest plugin, CancellationToken cancellationToken = default)
+    public static Task<byte[]> DownloadAsync(PluginManifest plugin, CancellationToken cancellationToken = default) =>
+        DownloadAsync(plugin.DownloadUrl!, plugin.Size, cancellationToken);
+
+    public static async Task<string> GetStringAsync(string url, CancellationToken cancellationToken = default)
     {
-        var limit = plugin.Size > 0 ? Math.Min(plugin.Size, MaxDownload) : MaxDownload;
-        using var response = await Http.GetAsync(plugin.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.CacheControl = new() { NoCache = true };
+        using var response = await Http.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadAsStringAsync(cancellationToken);
+    }
+
+    public static async Task<byte[]> DownloadAsync(string url, long size, CancellationToken cancellationToken = default)
+    {
+        var limit = size > 0 ? Math.Min(size, MaxDownload) : MaxDownload;
+        using var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         if (response.Content.Headers.ContentLength > limit)
-            throw new InvalidDataException("The download is bigger than the repo says.");
+            throw new InvalidDataException("The download is bigger than expected.");
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var buffer = new MemoryStream();
@@ -179,7 +187,7 @@ public sealed class Marketplace(JsonSettings settings)
         while ((read = await stream.ReadAsync(chunk, cancellationToken)) > 0)
         {
             if (buffer.Length + read > limit)
-                throw new InvalidDataException("The download is bigger than the repo says.");
+                throw new InvalidDataException("The download is bigger than expected.");
 
             buffer.Write(chunk, 0, read);
         }

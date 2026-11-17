@@ -361,6 +361,9 @@ public sealed class MainModel : Observable
     private int _count;
     private string _discord = "";
     private bool _discordHealthy = true;
+    private string? _updateText;
+    private string? _updateTip;
+    private bool _canUpdate;
 
     public ObservableCollection<PluginItem> Sources { get; } = [];
 
@@ -390,6 +393,26 @@ public sealed class MainModel : Observable
         private set => Set(ref _discordHealthy, value);
     }
 
+    public string AppVersion { get; } = $"v{AppUpdater.Current}";
+
+    public string? UpdateText
+    {
+        get => _updateText;
+        private set => Set(ref _updateText, value);
+    }
+
+    public string? UpdateTip
+    {
+        get => _updateTip;
+        private set => Set(ref _updateTip, value);
+    }
+
+    public bool CanUpdate
+    {
+        get => _canUpdate;
+        private set => Set(ref _canUpdate, value);
+    }
+
     public void Update(App app)
     {
         var plugins = app.Host.Plugins;
@@ -407,6 +430,13 @@ public sealed class MainModel : Observable
         Count = plugins.Count;
         Discord = PresenceText.Discord(app.Output.Status);
         DiscordHealthy = app.Output.Status.Healthy;
+        UpdateText = app.AppUpdate is not { } release ? null
+            : app.AppUpdating ? "Updating…"
+            : app.AppUpdateError is not null ? "Update failed · retry"
+            : $"Update to {release.Version}";
+        UpdateTip = app.AppUpdate is null ? null
+            : app.AppUpdateError ?? $"Aura {app.AppUpdate.Version} is available. Aura downloads it and restarts.";
+        CanUpdate = app.AppUpdate is not null && !app.AppUpdating;
 
         if (ranked.Count == 0)
         {

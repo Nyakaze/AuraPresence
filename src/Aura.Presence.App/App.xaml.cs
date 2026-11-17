@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using Aura.Presence.App.Arbitration;
@@ -40,6 +41,12 @@ public partial class App : Application
     public IReadOnlyList<CatalogEntry> Catalog { get; private set; } = [];
 
     public bool CatalogLoading { get; private set; }
+
+    public AppRelease? AppUpdate { get; private set; }
+
+    public bool AppUpdating { get; private set; }
+
+    public string? AppUpdateError { get; private set; }
 
     public static void OpenFolder(string path) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
 
@@ -99,6 +106,46 @@ public partial class App : Application
                 CatalogLoading = false;
                 QueueRefresh();
             }
+        }
+    }
+
+    public async Task CheckAppUpdateAsync()
+    {
+        try
+        {
+            AppUpdate = await AppUpdater.CheckAsync();
+
+            if (AppUpdate is not null)
+                _log.Info($"Aura {AppUpdate.Version} is available (running {AppUpdater.Current}).");
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            _log.Warn($"Checking for an Aura update failed: {exception.Message}");
+        }
+
+        QueueRefresh();
+    }
+
+    public async Task UpdateAuraAsync()
+    {
+        if (AppUpdate is not { } release || AppUpdating)
+            return;
+
+        AppUpdating = true;
+        AppUpdateError = null;
+        QueueRefresh();
+
+        try
+        {
+            await AppUpdater.DownloadAndApplyAsync(release);
+            await ExitAsync(restart: true);
+        }
+        catch (Exception exception) when (CatalogItem.IsExpected(exception))
+        {
+            _log.Error($"Updating Aura to {release.Version} failed.", exception);
+            AppUpdateError = Marketplace.Describe(exception);
+            AppUpdating = false;
+            QueueRefresh();
         }
     }
 
@@ -179,6 +226,7 @@ public partial class App : Application
         Host.Changed += QueueRefresh;
 
         _ = StartPluginsAsync();
+        _ = Task.Run(() => AppUpdater.RemoveOldFiles(AppContext.BaseDirectory));
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -198,7 +246,7 @@ public partial class App : Application
         using var daily = new PeriodicTimer(TimeSpan.FromHours(24));
 
         do
-            await RefreshCatalogAsync();
+            await Task.WhenAll(RefreshCatalogAsync(), CheckAppUpdateAsync());
         while (await daily.WaitForNextTickAsync());
     }
 
@@ -251,6 +299,10 @@ public partial class App : Application
         }
 
         menu.Items.Add(Item("Open Aura", OpenWindow, FontWeights.SemiBold));
+
+        if (AppUpdate is { } release && !AppUpdating)
+            menu.Items.Add(Item($"Update Aura to {release.Version}", () => _ = UpdateAuraAsync()));
+
         menu.Items.Add(Item("Start with Windows", ToggleAutostart, isChecked: Autostart.IsEnabled));
         menu.Items.Add(Item("Open logs folder", () => OpenFolder(AppPaths.Logs)));
         menu.Items.Add(new Separator());
@@ -281,14 +333,22 @@ public partial class App : Application
         _log.Info($"Start with Windows: {(Autostart.IsEnabled ? "on" : "off")}.");
     }
 
-    private async Task ExitAsync()
+    private async Task ExitAsync(bool restart = false)
     {
         _window?.Close();
         _tray?.Dispose();
         _tray = null;
         await Host.DisposeAsync();
         await Output.DisposeAsync();
-        _log.Info("Aura stopped.");
+        _log.Info(restart ? "Aura is restarting." : "Aura stopped.");
+
+        if (restart)
+        {
+            _instance?.Dispose();
+            _instance = null;
+            Process.Start(new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, AppUpdater.ExecutableName)) { UseShellExecute = false });
+        }
+
         Shutdown();
     }
 }
