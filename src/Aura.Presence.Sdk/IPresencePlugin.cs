@@ -8,6 +8,12 @@ public interface IPresencePlugin
 
     int DefaultPriority => 0;
 
+    string? Description => null;
+
+    bool ShowsActivity => true;
+
+    IReadOnlyList<PluginSetting> Settings => [];
+
     Task StartAsync(IPluginContext context, CancellationToken cancellationToken);
 
     Task StopAsync(CancellationToken cancellationToken);

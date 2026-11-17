@@ -3,16 +3,23 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
     <AssemblyName>AuraPresence</AssemblyName>
     <RootNamespace>Aura.Presence.App</RootNamespace>
     <Product>Aura</Product>
     <Description>Rich Presence hub for Discord</Description>
+    <ApplicationIcon>Ui\aura.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Aura.Presence.Sdk\Aura.Presence.Sdk.csproj" />
     <ProjectReference Include="..\..\..\Corvus\Crovus\Crovus.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="System.IO" />
+    <Resource Include="Ui\aura.ico" />
   </ItemGroup>
 
 </Project>

@@ -10,86 +10,152 @@ public sealed class LoadedPlugin(IPresencePlugin plugin, PluginContext context, 
     public PluginContext Context { get; } = context;
 
     public bool Enabled { get; set; } = enabled;
+
+    public string Id => Plugin.Id;
 }
 
 public sealed class PluginHost : IAsyncDisposable
 {
     private const string DisabledPluginsSetting = "disabledPlugins";
+    private const string OrderSetting = "pluginOrder";
     private const string DisabledMessage = "Disabled.";
 
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(5);
 
     private readonly AppLog _log = AppLog.For("PluginHost");
     private readonly ActivityArbiter _arbiter;
-    private readonly JsonPluginSettings _settings;
+    private readonly JsonSettings _settings;
+    private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _shutdown = new();
-    private readonly List<LoadedPlugin> _plugins = [];
     private readonly MediaBus _mediaBus = new();
+    private List<LoadedPlugin> _plugins = [];
 
-    public PluginHost(ActivityArbiter arbiter, JsonPluginSettings settings)
+    public PluginHost(ActivityArbiter arbiter, JsonSettings settings)
     {
         _arbiter = arbiter;
         _settings = settings;
     }
 
+    public event Action? Changed;
+
     public IReadOnlyList<LoadedPlugin> Plugins => _plugins;
 
-    public async Task StartAsync(string pluginsDirectory)
+    public Task StartAsync(string pluginsDirectory) => StartAsync(PluginLoader.LoadAll(pluginsDirectory));
+
+    public async Task StartAsync(IEnumerable<IPresencePlugin> plugins)
     {
         var disabled = _settings.Get<string[]>(DisabledPluginsSetting, []).ToHashSet(StringComparer.Ordinal);
+        var order = _settings.Get<string[]>(OrderSetting, []);
+        var loaded = new List<LoadedPlugin>();
 
-        foreach (var plugin in PluginLoader.LoadAll(pluginsDirectory))
+        foreach (var plugin in plugins)
         {
-            if (_plugins.Any(loaded => loaded.Plugin.Id == plugin.Id))
+            if (loaded.Any(existing => existing.Id == plugin.Id))
             {
                 _log.Warn($"Duplicate plugin id '{plugin.Id}' ignored.");
                 continue;
             }
 
-            var loaded = new LoadedPlugin(plugin, new PluginContext(plugin, _arbiter, _mediaBus),
-                !disabled.Contains(plugin.Id));
-            _plugins.Add(loaded);
-
-            if (loaded.Enabled)
-                await StartPluginAsync(loaded);
-            else
-                loaded.Context.ReportHealth(PluginHealth.Waiting, DisabledMessage);
+            var context = new PluginContext(plugin, _arbiter, _mediaBus);
+            context.HealthChanged += (_, _) => Changed?.Invoke();
+            loaded.Add(new LoadedPlugin(plugin, context, !disabled.Contains(plugin.Id)));
         }
+
+        _plugins = [.. loaded.OrderBy(plugin => Position(order, plugin.Id)).ThenByDescending(plugin => plugin.Plugin.DefaultPriority)];
+        _arbiter.SetOrder(_plugins.Select(plugin => plugin.Id));
+
+        foreach (var plugin in _plugins)
+        {
+            if (plugin.Enabled)
+                await StartPluginAsync(plugin);
+            else
+                plugin.Context.ReportHealth(PluginHealth.Waiting, DisabledMessage);
+        }
+
+        Changed?.Invoke();
     }
 
-    public async Task SetEnabledAsync(LoadedPlugin loaded, bool enabled)
+    public Task SetEnabledAsync(LoadedPlugin loaded, bool enabled) => Serialized(async () =>
     {
         if (loaded.Enabled == enabled)
             return;
 
         loaded.Enabled = enabled;
-        _settings.Set(DisabledPluginsSetting,
-            _plugins.Where(plugin => !plugin.Enabled).Select(plugin => plugin.Plugin.Id).ToArray());
+        _settings.Set(DisabledPluginsSetting, _plugins.Where(plugin => !plugin.Enabled).Select(plugin => plugin.Id).ToArray());
 
         if (enabled)
         {
-            if (Activator.CreateInstance(loaded.Plugin.GetType()) is IPresencePlugin fresh)
-                loaded.Plugin = fresh;
-
-            _log.Info($"Plugin '{loaded.Plugin.Id}' enabled.");
+            Renew(loaded);
+            _log.Info($"Plugin '{loaded.Id}' enabled.");
             await StartPluginAsync(loaded);
-
-            return;
+        }
+        else
+        {
+            await StopPluginAsync(loaded);
+            loaded.Context.ReportHealth(PluginHealth.Waiting, DisabledMessage);
+            _log.Info($"Plugin '{loaded.Id}' disabled.");
         }
 
+        Changed?.Invoke();
+    });
+
+    public Task RestartAsync(LoadedPlugin loaded) => Serialized(async () =>
+    {
+        if (!loaded.Enabled)
+            return;
+
         await StopPluginAsync(loaded);
-        loaded.Context.ReportHealth(PluginHealth.Waiting, DisabledMessage);
-        _log.Info($"Plugin '{loaded.Plugin.Id}' disabled.");
+        Renew(loaded);
+        _log.Info($"Plugin '{loaded.Id}' restarted.");
+        await StartPluginAsync(loaded);
+        Changed?.Invoke();
+    });
+
+    public void SetOrder(IEnumerable<string> pluginIds)
+    {
+        string[] order = [.. pluginIds];
+        _plugins = [.. _plugins.OrderBy(plugin => Position(order, plugin.Id))];
+        _arbiter.SetOrder(_plugins.Select(plugin => plugin.Id));
+        _settings.Set(OrderSetting, _plugins.Select(plugin => plugin.Id).ToArray());
+        Changed?.Invoke();
     }
 
     public async ValueTask DisposeAsync()
     {
+        await _gate.WaitAsync();
         await _shutdown.CancelAsync();
 
         foreach (var loaded in _plugins.Where(plugin => plugin.Enabled))
             await StopPluginAsync(loaded);
 
         _shutdown.Dispose();
+    }
+
+    private static int Position(string[] order, string id)
+    {
+        var index = Array.IndexOf(order, id);
+
+        return index < 0 ? int.MaxValue : index;
+    }
+
+    private static void Renew(LoadedPlugin loaded)
+    {
+        if (Activator.CreateInstance(loaded.Plugin.GetType()) is IPresencePlugin fresh)
+            loaded.Plugin = fresh;
+    }
+
+    private async Task Serialized(Func<Task> action)
+    {
+        await _gate.WaitAsync();
+
+        try
+        {
+            await action();
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     private async Task StartPluginAsync(LoadedPlugin loaded)
@@ -101,7 +167,7 @@ public sealed class PluginHost : IAsyncDisposable
         catch (Exception exception)
         {
             loaded.Context.ReportHealth(PluginHealth.Failed, exception.Message);
-            _log.Error($"Plugin '{loaded.Plugin.Id}' failed to start.", exception);
+            _log.Error($"Plugin '{loaded.Id}' failed to start.", exception);
         }
     }
 
@@ -115,10 +181,10 @@ public sealed class PluginHost : IAsyncDisposable
         }
         catch (Exception exception)
         {
-            _log.Error($"Plugin '{loaded.Plugin.Id}' failed to stop cleanly.", exception);
+            _log.Error($"Plugin '{loaded.Id}' failed to stop cleanly.", exception);
         }
 
-        _arbiter.Withdraw(loaded.Plugin.Id);
+        _arbiter.Withdraw(loaded.Id);
         await loaded.Context.Media.PublishAsync(null);
     }
 }

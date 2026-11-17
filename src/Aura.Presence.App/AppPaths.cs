@@ -11,6 +11,8 @@ public static class AppPaths
 
     public static string Plugins { get; } = Path.Combine(AppContext.BaseDirectory, "plugins");
 
+    public static string SettingsFile { get; } = Path.Combine(DataRoot, "settings.json");
+
     public static string PluginDataFor(string pluginId) => EnsureDirectory(Path.Combine(PluginData, pluginId));
 
     private static string EnsureDirectory(string path)

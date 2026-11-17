@@ -17,10 +17,14 @@ public sealed class PluginContext : IPluginContext, IActivityReporter
         Media = mediaBus.For(plugin.Id);
         DataDirectory = AppPaths.PluginDataFor(plugin.Id);
         Log = AppLog.For(plugin.Id);
-        Settings = new JsonPluginSettings(Path.Combine(DataDirectory, "settings.json"));
+        Settings = new JsonSettings(Path.Combine(DataDirectory, "settings.json"));
     }
 
     public event Action<PluginHealth, string?>? HealthChanged;
+
+    public JsonSettings Settings { get; }
+
+    IPluginSettings IPluginContext.Settings => Settings;
 
     public PluginHealth Health { get; private set; } = PluginHealth.Waiting;
 
@@ -31,8 +35,6 @@ public sealed class PluginContext : IPluginContext, IActivityReporter
     public IMediaBus Media { get; }
 
     public IPluginLog Log { get; }
-
-    public IPluginSettings Settings { get; }
 
     public string DataDirectory { get; }
 

@@ -10,6 +10,8 @@ public sealed class SamplePlugin : IPresencePlugin
 
     public string DisplayName => "Sample";
 
+    public string Description => $"A test plugin to copy when you build your own. It reports one fixed activity while {ApplicationIdVariable} is set.";
+
     public async Task StartAsync(IPluginContext context, CancellationToken cancellationToken)
     {
         var applicationId = Environment.GetEnvironmentVariable(ApplicationIdVariable);

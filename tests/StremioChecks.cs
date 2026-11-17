@@ -61,6 +61,20 @@ Check(!Aura.Presence.Services.Cinemeta.CinemetaClient.NamesMatch("Dune Part Two"
 Check(AniListClient.TitlesMatch("Frieren: Beyond Journey's End Season 2", null, "Frieren: Beyond Journey's End"), "anilist title match");
 Check(!AniListClient.TitlesMatch("Breaking Bad", "Bokura no", null), "anilist title mismatch");
 
+var show = new NowPlaying { Title = "As a Reincarnated Aristocrat", Kind = MediaKind.Episode, Season = 3, Episode = 2 };
+Check(StremioPlugin.StateLine(show) == "S03E02", "episode state line");
+Check(StremioPlugin.StateLine(show with { State = PlaybackState.Paused }) == "S03E02 - Paused", "paused episode state line");
+Check(StremioPlugin.StateLine(show with { Kind = MediaKind.Other }) is null, "an unknown episode shows no made-up label");
+Check(StremioPlugin.StateLine(show with { Kind = MediaKind.Other, State = PlaybackState.Paused }) == "Paused", "an unknown episode still shows pause");
+Check(StremioPlugin.StateLine(show with { Kind = MediaKind.Movie, Year = 2024 }) == "Movie (2024)", "movie state line");
+
+var playerText = PlayerTitle.Parse("The Iceblade Sorcerer Shall Rule the World - The Boy Who Is the World's Strongest Sorcerer Dons a Mask... Again (2x2)");
+Check(playerText is { Show: "The Iceblade Sorcerer Shall Rule the World", EpisodeName: "The Boy Who Is the World's Strongest Sorcerer Dons a Mask... Again", Season: 2, Episode: 2 },
+    "player text gives show, episode name, season and episode");
+Check(PlayerTitle.Parse("Frieren (1x13)") is { Show: "Frieren", EpisodeName: null, Season: 1, Episode: 13 }, "player text without an episode name");
+Check(PlayerTitle.Parse("Dune: Part Two") is null, "player text of a movie has no episode");
+Check(PlayerTitle.Parse("00:24:15") is null, "player times are not titles");
+
 Console.WriteLine("All Stremio checks passed.");
 
 static void Check(bool condition, string what)

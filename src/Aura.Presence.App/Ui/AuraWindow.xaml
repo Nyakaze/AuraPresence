@@ -1,0 +1,547 @@
+<Window x:Class="Aura.Presence.App.Ui.AuraWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:Aura.Presence.App.Ui"
+        Title="Aura" Width="1100" Height="720" MinWidth="860" MinHeight="560"
+        WindowStartupLocation="CenterScreen" Icon="/Ui/aura.ico"
+        Background="{StaticResource Bg}" Foreground="{StaticResource Ink}"
+        FontFamily="{StaticResource UiFont}" FontSize="14" UseLayoutRounding="True">
+
+    <Window.Resources>
+
+        <DataTemplate x:Key="PluginRow" DataType="{x:Type ui:PluginItem}">
+            <Grid x:Name="Row" AllowDrop="True" DragOver="Row_DragOver" Background="Transparent">
+                <Border x:Name="Rule" Height="1" VerticalAlignment="Top" Background="{StaticResource Line}" Margin="12,0" />
+                <Button Style="{StaticResource Button.Surface}" Click="Open_Click" AutomationProperties.Name="{Binding Name}" />
+                <DockPanel Margin="4,10,12,10" MinHeight="44">
+                    <Button x:Name="Grip" DockPanel.Dock="Left" Style="{StaticResource Button.Grip}"
+                            PreviewMouseLeftButtonDown="Grip_MouseDown" KeyDown="Grip_KeyDown"
+                            AutomationProperties.Name="{Binding MoveLabel}" ToolTip="Drag to change the order">
+                        <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Grip}" />
+                    </Button>
+                    <Border DockPanel.Dock="Left" Style="{StaticResource Tile}" Margin="8,0,14,0" IsHitTestVisible="False">
+                        <ContentPresenter Content="{Binding Icon}" Width="24" Height="24" />
+                    </Border>
+                    <ContentControl DockPanel.Dock="Right" Style="{StaticResource Glyph}" Content="{StaticResource G.ChevronRight}"
+                                    Foreground="{StaticResource Muted}" Margin="14,0,0,0" IsHitTestVisible="False" />
+                    <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding IsOn}"
+                                  Click="Toggle_Click" AutomationProperties.Name="{Binding Name}" />
+                    <StackPanel VerticalAlignment="Center" IsHitTestVisible="False" Margin="0,0,16,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Version}" FontFamily="{StaticResource MonoFont}" FontSize="12"
+                                       Foreground="{StaticResource Muted}" Margin="8,0,0,1" VerticalAlignment="Bottom" />
+                        </StackPanel>
+                        <DockPanel Margin="0,2,0,0">
+                            <Ellipse x:Name="Dot" Style="{StaticResource Dot}" Margin="0,0,7,0" Visibility="Collapsed" />
+                            <TextBlock x:Name="Status" Text="{Binding Status}" FontSize="13" Foreground="{StaticResource Muted}"
+                                       TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                    </StackPanel>
+                </DockPanel>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                    <Setter TargetName="Rule" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding CanMove}" Value="False">
+                    <Setter TargetName="Grip" Property="Visibility" Value="Hidden" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsDragging}" Value="True">
+                    <Setter TargetName="Row" Property="Opacity" Value="0.4" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="Live">
+                    <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Status" Property="Foreground" Value="{StaticResource Ink}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="Warn">
+                    <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Dot" Property="Fill" Value="{StaticResource Warn}" />
+                    <Setter TargetName="Status" Property="Foreground" Value="{StaticResource Warn}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="Fail">
+                    <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Dot" Property="Fill" Value="{StaticResource Fail}" />
+                    <Setter TargetName="Status" Property="Foreground" Value="{StaticResource Fail}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:MainModel}">
+            <StackPanel>
+                <Border Style="{StaticResource Card}" Visibility="{Binding Now, Converter={StaticResource Shown}}">
+                    <Border CornerRadius="9" Padding="20">
+                        <Border.Background>
+                            <RadialGradientBrush Center="0,0" GradientOrigin="0,0" RadiusX="1.2" RadiusY="0.9">
+                                <GradientStop Color="#299D7CF4" Offset="0" />
+                                <GradientStop Color="#009D7CF4" Offset="0.6" />
+                            </RadialGradientBrush>
+                        </Border.Background>
+                        <StackPanel DataContext="{Binding Now}">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource Button.SecondarySmall}" Click="Pin_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Pin}" Width="14" Height="14" />
+                                        <TextBlock Text="{Binding PinLabel}" Margin="8,0,0,0" />
+                                    </StackPanel>
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Ellipse Style="{StaticResource Dot}" />
+                                    <TextBlock Text="On your Discord profile now" FontSize="13" FontWeight="SemiBold" Margin="10,0,0,0" />
+                                </StackPanel>
+                            </DockPanel>
+                            <DockPanel Margin="0,16,0,0">
+                                <Border DockPanel.Dock="Left" Width="80" Height="80" CornerRadius="10" Background="{StaticResource TileBg}"
+                                        BorderBrush="{StaticResource Line}" BorderThickness="1" Margin="0,0,18,0" VerticalAlignment="Top">
+                                    <Grid>
+                                        <ContentPresenter Content="{Binding Icon}" Width="44" Height="44" />
+                                        <Border CornerRadius="9">
+                                            <Border.Background>
+                                                <ImageBrush ImageSource="{Binding Poster}" Stretch="UniformToFill" />
+                                            </Border.Background>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Heading}" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Muted}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Details}" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding State}" Visibility="{Binding State, Converter={StaticResource Shown}}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Elapsed}" FontSize="13" Foreground="{StaticResource Muted}"
+                                               Visibility="{Binding Elapsed, Converter={StaticResource Shown}}" />
+                                    <Border Style="{StaticResource Tag}" Height="28" Padding="12,0" Margin="0,10,0,0" HorizontalAlignment="Left"
+                                            Visibility="{Binding Button, Converter={StaticResource Shown}}">
+                                        <TextBlock Text="{Binding Button}" FontSize="13" Foreground="{StaticResource Ink}" VerticalAlignment="Center" />
+                                    </Border>
+                                </StackPanel>
+                            </DockPanel>
+                            <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,16,0,0" Padding="0,14,0,0">
+                                <TextBlock Text="{Binding Footnote}" Style="{StaticResource Small}" />
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </Border>
+                <Border Style="{StaticResource Card}" Padding="20" Visibility="{Binding Now, Converter={StaticResource Shown}, ConverterParameter=invert}">
+                    <StackPanel>
+                        <TextBlock Text="Your Discord status is clear" FontSize="13" FontWeight="SemiBold" />
+                        <TextBlock Text="No plugin that is on has anything playing." Style="{StaticResource Small}" Margin="0,4,0,0" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Shown on Discord, top first" Style="{StaticResource H2}" Margin="0,24,0,0" />
+                <TextBlock Text="When two plugins have something to show, the higher one wins. Drag to change the order."
+                           Style="{StaticResource Small}" Margin="0,2,0,12" />
+                <Border Style="{StaticResource Card}" Padding="4">
+                    <ItemsControl ItemsSource="{Binding Sources}" ItemTemplate="{StaticResource PluginRow}" Focusable="False" />
+                </Border>
+
+                <StackPanel Visibility="{Binding Helpers.Count, Converter={StaticResource Shown}}">
+                    <TextBlock Text="Helpers" Style="{StaticResource H2}" Margin="0,24,0,0" />
+                    <TextBlock Text="They act on what you play and never set your status." Style="{StaticResource Small}" Margin="0,2,0,12" />
+                    <Border Style="{StaticResource Card}" Padding="4">
+                        <ItemsControl ItemsSource="{Binding Helpers}" ItemTemplate="{StaticResource PluginRow}" Focusable="False" />
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:TextItem}">
+            <Grid>
+                <Border x:Name="Rule" Height="1" VerticalAlignment="Top" Background="{StaticResource Line}" />
+                <DockPanel Margin="0,18">
+                    <TextBox x:Name="Box" DockPanel.Dock="Right" Style="{StaticResource Input}" Width="240" Margin="24,0,0,0"
+                             Text="{Binding Value}" AutomationProperties.Name="{Binding Label}" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Label}" Style="{StaticResource Strong}" />
+                        <TextBlock Text="{Binding Help}" Style="{StaticResource Small}" Visibility="{Binding Help, Converter={StaticResource Shown}}" />
+                    </StackPanel>
+                </DockPanel>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                    <Setter TargetName="Rule" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Monospace}" Value="True">
+                    <Setter TargetName="Box" Property="FontFamily" Value="{StaticResource MonoFont}" />
+                    <Setter TargetName="Box" Property="FontSize" Value="13" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:ToggleItem}">
+            <Grid>
+                <Border x:Name="Rule" Height="1" VerticalAlignment="Top" Background="{StaticResource Line}" />
+                <DockPanel Margin="0,18">
+                    <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" Margin="24,0,0,0"
+                                  IsChecked="{Binding Value}" AutomationProperties.Name="{Binding Label}" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Label}" Style="{StaticResource Strong}" />
+                        <TextBlock Text="{Binding Help}" Style="{StaticResource Small}" Visibility="{Binding Help, Converter={StaticResource Shown}}" />
+                    </StackPanel>
+                </DockPanel>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                    <Setter TargetName="Rule" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:NumberItem}">
+            <Grid>
+                <Border x:Name="Rule" Height="1" VerticalAlignment="Top" Background="{StaticResource Line}" />
+                <DockPanel Margin="0,18">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="24,0,0,0" VerticalAlignment="Center">
+                        <TextBox Style="{StaticResource Input}" Width="76" TextAlignment="Right" Text="{Binding Value}"
+                                 AutomationProperties.Name="{Binding Label}" />
+                        <TextBlock Text="{Binding Unit}" Foreground="{StaticResource Muted}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Label}" Style="{StaticResource Strong}" />
+                        <TextBlock Text="{Binding Help}" Style="{StaticResource Small}" Visibility="{Binding Help, Converter={StaticResource Shown}}" />
+                    </StackPanel>
+                </DockPanel>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                    <Setter TargetName="Rule" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:ChoiceItem}">
+            <Grid>
+                <Border x:Name="Rule" Height="1" VerticalAlignment="Top" Background="{StaticResource Line}" />
+                <DockPanel Margin="0,18">
+                    <Border DockPanel.Dock="Right" Margin="24,0,0,0" Padding="3" CornerRadius="{Binding ActualHeight, RelativeSource={RelativeSource Self}, Converter={StaticResource Capsule}}" Background="{StaticResource Bg}"
+                            BorderBrush="{StaticResource Line}" BorderThickness="1" VerticalAlignment="Center">
+                        <ItemsControl ItemsSource="{Binding Options}" Focusable="False">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <RadioButton Style="{StaticResource Segment}" Content="{Binding Label}" IsChecked="{Binding IsChecked}"
+                                                 GroupName="{Binding DataContext.GroupName, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Label}" Style="{StaticResource Strong}" />
+                        <TextBlock Text="{Binding Help}" Style="{StaticResource Small}" Visibility="{Binding Help, Converter={StaticResource Shown}}" />
+                    </StackPanel>
+                </DockPanel>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                    <Setter TargetName="Rule" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:PluginPage}">
+            <StackPanel>
+                <Button Style="{StaticResource Button.Text}" Click="Back_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.ChevronLeft}" />
+                        <TextBlock Text="Installed plugins" Margin="4,0,0,0" />
+                    </StackPanel>
+                </Button>
+                <DockPanel Margin="0,16,0,0">
+                    <Border DockPanel.Dock="Left" Style="{StaticResource Tile}" Width="56" Height="56" CornerRadius="10" Margin="0,0,16,0">
+                        <ContentPresenter Content="{Binding Plugin.Icon}" Width="32" Height="32" />
+                    </Border>
+                    <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" DataContext="{Binding Plugin}"
+                                  IsChecked="{Binding IsOn}" Click="Toggle_Click" AutomationProperties.Name="{Binding Name}" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Plugin.Name}" Style="{StaticResource H1}" />
+                        <TextBlock Text="{Binding Plugin.Byline}" Style="{StaticResource Small}" />
+                    </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,24,0,0" DataContext="{Binding Plugin}">
+                    <Ellipse x:Name="Dot" Style="{StaticResource Dot}" Margin="0,0,7,0" Visibility="Collapsed" />
+                    <TextBlock x:Name="Status" Text="{Binding Status}" FontSize="13" Foreground="{StaticResource Muted}" TextWrapping="Wrap" />
+                </DockPanel>
+                <TextBlock Text="{Binding Plugin.Description}" Style="{StaticResource Body}" MaxWidth="560" HorizontalAlignment="Left"
+                           Margin="0,8,0,0" Visibility="{Binding Plugin.Description, Converter={StaticResource Shown}}" />
+
+                <TextBlock Text="Settings" Style="{StaticResource H2}" Margin="0,28,0,0" />
+                <TextBlock Text="Changes save as you make them." Style="{StaticResource Small}" Margin="0,2,0,12" />
+                <Border Style="{StaticResource Card}" Padding="24,0" Visibility="{Binding HasSettings, Converter={StaticResource Shown}}">
+                    <ItemsControl ItemsSource="{Binding Settings}" Focusable="False" />
+                </Border>
+                <Border Style="{StaticResource Card}" Padding="24,20"
+                        Visibility="{Binding HasSettings, Converter={StaticResource Shown}, ConverterParameter=invert}">
+                    <TextBlock Text="This plugin has no settings." Foreground="{StaticResource Muted}" />
+                </Border>
+
+                <StackPanel Orientation="Horizontal" Margin="0,24,0,0">
+                    <Button Style="{StaticResource Button.Secondary}" Click="OpenData_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.FolderOpen}" />
+                            <TextBlock Text="Open data folder" Margin="8,0,0,0" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Button.Secondary}" Click="Reset_Click" Margin="10,0,0,0"
+                            Visibility="{Binding HasSettings, Converter={StaticResource Shown}}">
+                        <StackPanel Orientation="Horizontal">
+                            <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.RotateCcw}" />
+                            <TextBlock Text="Reset to defaults" Margin="8,0,0,0" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Plugin.Tone}" Value="Live">
+                    <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Status" Property="Foreground" Value="{StaticResource Ink}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Plugin.Tone}" Value="Warn">
+                    <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Dot" Property="Fill" Value="{StaticResource Warn}" />
+                    <Setter TargetName="Status" Property="Foreground" Value="{StaticResource Warn}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Plugin.Tone}" Value="Fail">
+                    <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Dot" Property="Fill" Value="{StaticResource Fail}" />
+                    <Setter TargetName="Status" Property="Foreground" Value="{StaticResource Fail}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="CatalogCard" DataType="{x:Type ui:CatalogItem}">
+            <Border x:Name="Card" Style="{StaticResource Card}" Margin="8">
+                <Border.RenderTransform>
+                    <TranslateTransform />
+                </Border.RenderTransform>
+                <Grid>
+                    <Button Style="{StaticResource Button.Surface}" Click="Catalog_Click" AutomationProperties.Name="{Binding Name}" />
+                    <DockPanel Margin="20" IsHitTestVisible="False">
+                        <DockPanel DockPanel.Dock="Bottom" Margin="0,16,0,0">
+                            <Border DockPanel.Dock="Left" Style="{StaticResource Tag}">
+                                <TextBlock Text="{Binding Category}" VerticalAlignment="Center" />
+                            </Border>
+                            <Grid HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <StackPanel x:Name="Installed" Orientation="Horizontal" Visibility="Collapsed">
+                                    <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Check}" Foreground="{StaticResource Muted}" Width="14" Height="14" />
+                                    <TextBlock Text="Installed" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Muted}" Margin="6,0,0,0" />
+                                </StackPanel>
+                                <TextBlock x:Name="Soon" Text="Coming soon" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Muted}" />
+                            </Grid>
+                        </DockPanel>
+                        <DockPanel DockPanel.Dock="Top">
+                            <Border DockPanel.Dock="Left" Style="{StaticResource Tile}" Margin="0,0,12,0">
+                                <ContentPresenter Content="{Binding Icon}" Width="24" Height="24" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
+                                <TextBlock Text="By Aura" FontSize="13" Foreground="{StaticResource Muted}" />
+                            </StackPanel>
+                        </DockPanel>
+                        <TextBlock Text="{Binding Blurb}" Style="{StaticResource Body}" Margin="0,12,0,0" />
+                    </DockPanel>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Installed}" Value="True">
+                    <Setter TargetName="Installed" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Soon" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <Trigger SourceName="Card" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource LineStrong}" />
+                    <Trigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetName="Card" Storyboard.TargetProperty="RenderTransform.(TranslateTransform.Y)"
+                                                 To="-2" Duration="0:0:0.18" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.EnterActions>
+                    <Trigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetName="Card" Storyboard.TargetProperty="RenderTransform.(TranslateTransform.Y)"
+                                                 To="0" Duration="0:0:0.18" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.ExitActions>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:MarketPage}">
+            <StackPanel>
+                <Grid>
+                    <Rectangle RadiusX="8" RadiusY="8" Stroke="{StaticResource LineStrong}" StrokeDashArray="4 3" />
+                    <DockPanel Margin="16,12">
+                        <ContentControl DockPanel.Dock="Left" Style="{StaticResource Glyph}" Content="{StaticResource G.Info}"
+                                        Foreground="{StaticResource Muted}" Margin="0,1,10,0" VerticalAlignment="Top" />
+                        <TextBlock FontSize="13" Foreground="{StaticResource Muted}" TextWrapping="Wrap">
+                            <Run Text="Preview." FontWeight="SemiBold" Foreground="{StaticResource Ink}" />
+                            <Run Text="This catalogue is a placeholder. For now, plugins install by copying them into Aura’s plugins folder." />
+                        </TextBlock>
+                    </DockPanel>
+                </Grid>
+                <DockPanel Margin="0,24,0,8">
+                    <Grid DockPanel.Dock="Left" Width="300" Margin="0,0,12,0">
+                        <TextBox Style="{StaticResource Input}" Tag="Search plugins" Padding="38,0,12,0"
+                                 Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Search plugins" />
+                        <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Search}" Foreground="{StaticResource Muted}"
+                                        HorizontalAlignment="Left" Margin="13,0,0,0" IsHitTestVisible="False" />
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding Categories}" Focusable="False" VerticalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <RadioButton Style="{StaticResource Chip}" GroupName="Category" Content="{Binding Label}"
+                                             IsChecked="{Binding IsChecked, Mode=OneTime}" Checked="Chip_Checked" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+                <ItemsControl ItemsSource="{Binding Results}" ItemTemplate="{StaticResource CatalogCard}" Focusable="False" Margin="-8,0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="{Binding Columns}" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+                <TextBlock Text="{Binding EmptyText}" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,40"
+                           Visibility="{Binding EmptyText, Converter={StaticResource Shown}}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:MarketDetailPage}">
+            <StackPanel DataContext="{Binding Item}">
+                <Button Style="{StaticResource Button.Text}" Click="Back_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.ChevronLeft}" />
+                        <TextBlock Text="Marketplace" Margin="4,0,0,0" />
+                    </StackPanel>
+                </Button>
+                <DockPanel Margin="0,16,0,0">
+                    <Border DockPanel.Dock="Left" Style="{StaticResource Tile}" Width="56" Height="56" CornerRadius="10" Margin="0,0,16,0">
+                        <ContentPresenter Content="{Binding Icon}" Width="32" Height="32" />
+                    </Border>
+                    <Grid DockPanel.Dock="Right" VerticalAlignment="Center">
+                        <StackPanel x:Name="Installed" Orientation="Horizontal" Visibility="Collapsed">
+                            <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Check}" Foreground="{StaticResource Muted}" />
+                            <TextBlock Text="Installed" FontWeight="SemiBold" Foreground="{StaticResource Muted}" Margin="6,0,0,0" />
+                        </StackPanel>
+                        <Button x:Name="Soon" Style="{StaticResource Button.Secondary}" IsEnabled="False" Content="Coming soon" />
+                    </Grid>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}" Style="{StaticResource H1}" />
+                        <TextBlock Style="{StaticResource Small}">
+                            <Run Text="By Aura ·" />
+                            <Run Text="{Binding Category, Mode=OneWay}" />
+                        </TextBlock>
+                    </StackPanel>
+                </DockPanel>
+                <TextBlock Text="{Binding Blurb}" Style="{StaticResource Body}" FontSize="16" LineHeight="25" MaxWidth="560"
+                           HorizontalAlignment="Left" Margin="0,24,0,0" />
+                <TextBlock Text="What it uses" Style="{StaticResource H2}" Margin="0,28,0,12" />
+                <Border Style="{StaticResource Card}" Padding="24,0">
+                    <ItemsControl ItemsSource="{Binding Uses}" Focusable="False">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Border x:Name="Rule" Height="1" VerticalAlignment="Top" Background="{StaticResource Line}" />
+                                    <DockPanel Margin="0,14">
+                                        <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Check}" Foreground="{StaticResource Action}"
+                                                        Margin="0,0,12,0" />
+                                        <TextBlock Text="{Binding}" Foreground="{StaticResource Text}" TextWrapping="Wrap" />
+                                    </DockPanel>
+                                </Grid>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                                        <Setter TargetName="Rule" Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+                <Border Style="{StaticResource Card}" Padding="24,20" Margin="0,24,0,0">
+                    <DockPanel>
+                        <ContentControl DockPanel.Dock="Left" Style="{StaticResource Glyph}" Content="{StaticResource G.ShieldCheck}"
+                                        Foreground="{StaticResource Action}" Width="22" Height="22" Margin="0,0,14,0" VerticalAlignment="Top" />
+                        <StackPanel>
+                            <TextBlock Text="{Binding AccessTitle}" Style="{StaticResource H2}" />
+                            <TextBlock Text="{Binding AccessText}" Style="{StaticResource Small}" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+            </StackPanel>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Item.Installed}" Value="True">
+                    <Setter TargetName="Installed" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Soon" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+    </Window.Resources>
+
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Height="56" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="24,0,16,0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,20,0">
+                    <Path Data="{StaticResource G.Ring}" Fill="{StaticResource Action}" Width="20" Height="20" Stretch="Uniform" />
+                    <TextBlock Text="Aura" FontSize="17" FontWeight="SemiBold" Margin="10,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <RadioButton x:Name="InstalledTab" DockPanel.Dock="Left" Style="{StaticResource Tab}" GroupName="Tabs"
+                             Click="InstalledTab_Click" AutomationProperties.Name="Installed plugins">
+                    <StackPanel Orientation="Horizontal">
+                        <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Puzzle}" />
+                        <TextBlock Text="Installed" Margin="8,0,8,0" />
+                        <TextBlock Text="{Binding Count}" FontSize="13" FontWeight="Normal" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </RadioButton>
+                <RadioButton x:Name="MarketTab" DockPanel.Dock="Left" Style="{StaticResource Tab}" GroupName="Tabs"
+                             Click="MarketTab_Click" AutomationProperties.Name="Marketplace">
+                    <StackPanel Orientation="Horizontal">
+                        <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.Store}" />
+                        <TextBlock Text="Marketplace" Margin="8,0,8,0" />
+                        <Border Style="{StaticResource Tag}">
+                            <TextBlock Text="Preview" VerticalAlignment="Center" />
+                        </Border>
+                    </StackPanel>
+                </RadioButton>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image Source="{StaticResource Logo.Discord}" Width="18" Height="14" />
+                    <Ellipse Margin="9,0,7,0">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse" BasedOn="{StaticResource Dot}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DiscordHealthy}" Value="False">
+                                        <Setter Property="Fill" Value="{StaticResource Warn}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                    <TextBlock Text="{Binding Discord}" FontSize="13" Foreground="{StaticResource Muted}" VerticalAlignment="Center"
+                               MaxWidth="320" TextTrimming="CharacterEllipsis" ToolTip="{Binding Discord}" />
+                    <Border Width="1" Height="20" Background="{StaticResource Line}" Margin="14,0,8,0" />
+                    <Button Style="{StaticResource Button.Icon}" Click="Logs_Click" ToolTip="Open logs folder"
+                            AutomationProperties.Name="Open logs folder">
+                        <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.FolderOpen}" />
+                    </Button>
+                </StackPanel>
+                <Border />
+            </DockPanel>
+        </Border>
+        <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+            <ContentControl x:Name="Page" MaxWidth="920" Margin="32,24,32,40" Focusable="False" SizeChanged="Page_SizeChanged" />
+        </ScrollViewer>
+    </DockPanel>
+</Window>

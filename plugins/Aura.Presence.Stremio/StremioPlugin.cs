@@ -13,6 +13,7 @@ public sealed partial class StremioPlugin : IPresencePlugin
     private static readonly TimeSpan RepublishInterval = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan AllowedDrift = TimeSpan.FromSeconds(3);
     private const int MissingPollsBeforeClear = 4;
+    private const int PlayerReadAttempts = 15;
     private const string UnknownTitle = "Stremio";
 
     private readonly StremioMediaSession _session = new();
@@ -29,6 +30,8 @@ public sealed partial class StremioPlugin : IPresencePlugin
     private ReleaseName? _release;
     private DateTimeOffset _firstSeen;
     private LibraryEntry? _entry;
+    private PlayerTitle? _player;
+    private int _playerReads;
     private string? _previousVideoId;
     private string? _previousFileName;
     private int _missingPolls;
@@ -44,6 +47,14 @@ public sealed partial class StremioPlugin : IPresencePlugin
     public string DisplayName => "Stremio";
 
     public int DefaultPriority => 100;
+
+    public string Description => "Reads what Stremio plays from Windows media controls and its saved library. Nothing to set up.";
+
+    public IReadOnlyList<PluginSetting> Settings { get; } =
+    [
+        new TextSetting(ApplicationIdSetting, "Discord application ID", DefaultApplicationId,
+            "Sets the name above your status, “Watching Stremio”. Use your own app to change it.", Monospace: true)
+    ];
 
     public Task StartAsync(IPluginContext context, CancellationToken cancellationToken)
     {
@@ -119,11 +130,16 @@ public sealed partial class StremioPlugin : IPresencePlugin
             _release = ReleaseName.Parse(playback.FileName);
             _firstSeen = DateTimeOffset.UtcNow;
             _entry = null;
+            _player = null;
+            _playerReads = 0;
             _context.Log.Info($"Now playing '{playback.FileName}', read as '{_release.Title}' S{_release.Season}E{_release.Episode}.");
             StartLookup(_release);
         }
 
         _context.ReportHealth(PluginHealth.Healthy, "Reading Stremio through Windows media controls.");
+
+        if (_player is null && _playerReads < PlayerReadAttempts)
+            ReadPlayer();
 
         if (_entry is null)
             MatchLibraryEntry();
@@ -136,6 +152,15 @@ public sealed partial class StremioPlugin : IPresencePlugin
             media = media with { EpisodeTitle = episodeTitle };
 
         await ShowAsync(media);
+    }
+
+    private void ReadPlayer()
+    {
+        _playerReads++;
+        _player = StremioPlayer.Read(_release!.HasTitle ? _release.Title : null);
+
+        if (_player is { } player)
+            _context.Log.Info($"Read S{player.Season:00}E{player.Episode:00} of '{player.Show}' from Stremio's player.");
     }
 
     private void MatchLibraryEntry()
@@ -154,8 +179,9 @@ public sealed partial class StremioPlugin : IPresencePlugin
         }
 
         var excludedVideoId = _fileName == _previousFileName ? null : _previousVideoId;
+        var release = _player is { } player ? _release! with { Season = player.Season, Episode = player.Episode } : _release!;
 
-        if (latest is null || !StremioLibrary.Matches(latest, _release!, _firstSeen, excludedVideoId, _lookup?.Title))
+        if (latest is null || !StremioLibrary.Matches(latest, release, _firstSeen, excludedVideoId, _lookup?.Title))
             return;
 
         _entry = latest;
@@ -166,19 +192,22 @@ public sealed partial class StremioPlugin : IPresencePlugin
     {
         var release = _release!;
         var lookup = _lookup;
+        var player = _player;
         var id = _entry?.Id;
-        var episode = id?.Episode ?? release.Episode;
-        var kind = _entry?.Type == "movie" ? MediaKind.Movie
+        var episode = player?.Episode ?? id?.Episode ?? release.Episode;
+        var kind = player is not null ? MediaKind.Episode
+            : _entry?.Type == "movie" ? MediaKind.Movie
             : episode is not null ? MediaKind.Episode
             : _entry is not null || lookup is { IsSeries: false } ? MediaKind.Movie
             : MediaKind.Other;
 
         return new NowPlaying
         {
-            Title = _entry?.Name ?? lookup?.Title ?? (release.HasTitle ? release.Title : UnknownTitle),
+            Title = _entry?.Name ?? lookup?.Title ?? (release.HasTitle ? release.Title : player?.Show ?? UnknownTitle),
             Kind = kind,
-            Season = kind is MediaKind.Episode ? id?.Season ?? release.Season : null,
+            Season = kind is MediaKind.Episode ? player?.Season ?? id?.Season ?? release.Season : null,
             Episode = kind is MediaKind.Episode ? episode : null,
+            EpisodeTitle = player?.EpisodeName,
             Year = lookup?.Year,
             PosterUrl = _entry?.PosterUrl ?? lookup?.PosterUrl,
             Ids = id?.Ids ?? lookup?.Ids ?? new Dictionary<string, string>(),
@@ -218,7 +247,7 @@ public sealed partial class StremioPlugin : IPresencePlugin
         }
     }
 
-    private PresenceActivity BuildActivity(NowPlaying media, DateTimeOffset? startedAt)
+    public static string? StateLine(NowPlaying media)
     {
         var label = media.Kind switch
         {
@@ -226,23 +255,28 @@ public sealed partial class StremioPlugin : IPresencePlugin
             MediaKind.Episode => $"S{media.Season:00}E{media.Episode ?? 1:00}",
             MediaKind.Movie when media.Year is { } year => $"Movie ({year})",
             MediaKind.Movie => "Movie",
-            _ => "Stremio"
+            _ => null
         };
 
-        var suffix = media.State switch
+        var state = media.State switch
         {
-            PlaybackState.Paused => " - Paused",
-            PlaybackState.Loading => " - Loading…",
-            _ => string.Empty
+            PlaybackState.Paused => "Paused",
+            PlaybackState.Loading => "Loading…",
+            _ => null
         };
 
+        return label is null ? state : state is null ? label : $"{label} - {state}";
+    }
+
+    private PresenceActivity BuildActivity(NowPlaying media, DateTimeOffset? startedAt)
+    {
         return new PresenceActivity
         {
             ApplicationId = _applicationId,
             Kind = ActivityKind.Watching,
             Name = media.Title,
             Details = media.Title,
-            State = label + suffix,
+            State = StateLine(media),
             LargeImage = new PresenceImage(media.PosterUrl ?? "stremio", media.EpisodeTitle ?? media.Title),
             StartedAt = startedAt,
             EndsAt = startedAt is { } start && media.Duration is { } duration ? start + duration : null,
@@ -395,6 +429,8 @@ public sealed partial class StremioPlugin : IPresencePlugin
         _fileName = null;
         _release = null;
         _entry = null;
+        _player = null;
+        _playerReads = 0;
         _missingPolls = 0;
         _lookupKey = null;
         _lookup = null;

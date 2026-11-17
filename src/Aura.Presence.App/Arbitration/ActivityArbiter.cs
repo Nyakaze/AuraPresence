@@ -9,6 +9,7 @@ public sealed class ActivityArbiter
     private readonly Lock _gate = new();
     private readonly Dictionary<string, ActivityClaim> _claims = new(StringComparer.Ordinal);
 
+    private string[] _order = [];
     private string? _pinnedSourceId;
     private ActivityClaim? _current;
 
@@ -19,10 +20,23 @@ public sealed class ActivityArbiter
         get
         {
             lock (_gate)
-            {
                 return _current;
-            }
         }
+    }
+
+    public string? PinnedSourceId
+    {
+        get
+        {
+            lock (_gate)
+                return _pinnedSourceId;
+        }
+    }
+
+    public IReadOnlyList<ActivityClaim> Ranked()
+    {
+        lock (_gate)
+            return Rank();
     }
 
     public void Submit(string sourceId, int priority, PresenceActivity activity)
@@ -40,6 +54,11 @@ public sealed class ActivityArbiter
         UpdateAndNotify(() => _pinnedSourceId = sourceId);
     }
 
+    public void SetOrder(IEnumerable<string> sourceIds)
+    {
+        UpdateAndNotify(() => _order = [.. sourceIds]);
+    }
+
     private void UpdateAndNotify(Action mutate)
     {
         ActivityClaim? next;
@@ -48,27 +67,26 @@ public sealed class ActivityArbiter
         lock (_gate)
         {
             mutate();
-            next = SelectWinner();
+            next = Rank().FirstOrDefault();
             changed = !Equals(next, _current);
             _current = next;
         }
 
         if (changed)
-        {
             CurrentChanged?.Invoke(next);
-        }
     }
 
-    private ActivityClaim? SelectWinner()
-    {
-        if (_pinnedSourceId is not null && _claims.TryGetValue(_pinnedSourceId, out var pinned))
-        {
-            return pinned;
-        }
+    private List<ActivityClaim> Rank() =>
+        [.. _claims.Values
+            .OrderBy(claim => claim.SourceId == _pinnedSourceId ? 0 : 1)
+            .ThenBy(claim => Position(claim.SourceId))
+            .ThenByDescending(claim => claim.Priority)
+            .ThenByDescending(claim => claim.UpdatedAt)];
 
-        return _claims.Values
-            .OrderByDescending(claim => claim.Priority)
-            .ThenByDescending(claim => claim.UpdatedAt)
-            .FirstOrDefault();
+    private int Position(string sourceId)
+    {
+        var index = Array.IndexOf(_order, sourceId);
+
+        return index < 0 ? int.MaxValue : index;
     }
 }
