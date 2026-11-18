@@ -134,8 +134,10 @@ public partial class AuraWindow : Window
     private void MarketTab_Click(object sender, RoutedEventArgs e)
     {
         Navigate(_market);
-        _ = App.Current.RefreshCatalogAsync();
+        _ = App.Current.CheckForUpdatesAsync();
     }
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e) => await App.Current.CheckForUpdatesAsync();
 
     private void Back_Click(object sender, RoutedEventArgs e) => Navigate(Page.Content is MarketDetailPage or ReposPage ? _market : _model);
 

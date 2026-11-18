@@ -708,6 +708,46 @@
                             ToolTip="{Binding AppLocation}" AutomationProperties.Name="{Binding AppLocation}" WindowChrome.IsHitTestVisibleInChrome="True">
                         <TextBlock Text="{Binding AppVersion}" FontFamily="{StaticResource MonoFont}" FontSize="12" FontWeight="Normal" />
                     </Button>
+                    <Button Style="{StaticResource Button.Icon}" Width="28" Height="28" Margin="2,2,0,0" VerticalAlignment="Center" Click="CheckUpdates_Click"
+                            Visibility="{Binding CheckText, Converter={StaticResource Shown}}" WindowChrome.IsHitTestVisibleInChrome="True"
+                            AutomationProperties.Name="{Binding CheckText}" ToolTipService.InitialShowDelay="80" ToolTipService.Placement="Bottom">
+                        <Button.ToolTip>
+                            <StackPanel>
+                                <TextBlock Text="{Binding CheckText}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding CheckTip}" Foreground="{StaticResource Muted}" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Button.ToolTip>
+                        <ContentControl Content="{StaticResource G.RotateCcw}" Width="14" Height="14" RenderTransformOrigin="0.5,0.5">
+                            <ContentControl.RenderTransform>
+                                <RotateTransform />
+                            </ContentControl.RenderTransform>
+                            <ContentControl.Style>
+                                <Style TargetType="ContentControl" BasedOn="{StaticResource Glyph}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Checking}" Value="True">
+                                            <DataTrigger.EnterActions>
+                                                <BeginStoryboard x:Name="Spin">
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetProperty="RenderTransform.Angle" From="360" To="0"
+                                                                         Duration="0:0:0.8" RepeatBehavior="Forever" />
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </DataTrigger.EnterActions>
+                                            <DataTrigger.ExitActions>
+                                                <StopStoryboard BeginStoryboardName="Spin" />
+                                            </DataTrigger.ExitActions>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ContentControl.Style>
+                        </ContentControl>
+                    </Button>
+                    <Button Style="{StaticResource Button.Primary}" Height="28" Padding="12,0" FontSize="13" Margin="8,2,0,0"
+                            VerticalAlignment="Center" Click="UpdateAura_Click" IsEnabled="{Binding CanUpdate}" ToolTip="{Binding UpdateTip}"
+                            Visibility="{Binding UpdateText, Converter={StaticResource Shown}}" WindowChrome.IsHitTestVisibleInChrome="True"
+                            AutomationProperties.Name="{Binding UpdateText}">
+                        <TextBlock Text="{Binding UpdateText}" />
+                    </Button>
                     <Border Style="{StaticResource Tag}" Margin="8,2,0,0" BorderBrush="{StaticResource Warn}" ToolTip="{Binding AppLocation}"
                             Visibility="{Binding IsDevBuild, Converter={StaticResource Shown}}">
                         <TextBlock Text="Dev build" Foreground="{StaticResource Warn}" VerticalAlignment="Center" />
@@ -739,22 +779,9 @@
                             ToolTip="Close" AutomationProperties.Name="Close" />
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Height="32" Padding="12,0" Margin="0,0,12,0" CornerRadius="6"
-                            ToolTipService.InitialShowDelay="80" ToolTipService.Placement="Bottom"
-                            Visibility="{Binding ShowsBrowsers, Converter={StaticResource Shown}}" WindowChrome.IsHitTestVisibleInChrome="True"
+                    <Border Style="{StaticResource Header.Pill}" Margin="0,0,4,0"
+                            Visibility="{Binding ShowsBrowsers, Converter={StaticResource Shown}}"
                             AutomationProperties.Name="{Binding BrowserList, StringFormat=Aura browser extension: {0}}">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Background" Value="Transparent" />
-                                <Setter Property="TextElement.Foreground" Value="{StaticResource Muted}" />
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="{StaticResource Overlay}" />
-                                        <Setter Property="TextElement.Foreground" Value="{StaticResource Ink}" />
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
                         <Border.ToolTip>
                             <StackPanel>
                                 <TextBlock Text="Aura browser extension" FontWeight="SemiBold" />
@@ -776,33 +803,34 @@
                             </Ellipse>
                         </StackPanel>
                     </Border>
-                    <Image Source="{StaticResource Logo.Discord}" Width="18" Height="14" />
-                    <Ellipse Margin="9,0,7,0">
-                        <Ellipse.Style>
-                            <Style TargetType="Ellipse" BasedOn="{StaticResource Dot}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding DiscordHealthy}" Value="False">
-                                        <Setter Property="Fill" Value="{StaticResource Warn}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Ellipse.Style>
-                    </Ellipse>
-                    <TextBlock Text="{Binding Discord}" FontSize="13" Foreground="{StaticResource Muted}" VerticalAlignment="Center"
-                               MaxWidth="320" TextTrimming="CharacterEllipsis" ToolTip="{Binding Discord}"
-                               WindowChrome.IsHitTestVisibleInChrome="True" />
-                    <Border Width="1" Height="20" Background="{StaticResource Line}" Margin="14,0,8,0" />
+                    <Border Style="{StaticResource Header.Pill}" AutomationProperties.Name="{Binding Discord, StringFormat=Discord: {0}}">
+                        <Border.ToolTip>
+                            <StackPanel>
+                                <TextBlock Text="Discord" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding Discord}" Foreground="{StaticResource Muted}" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Border.ToolTip>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Image Source="{StaticResource Logo.Discord}" Width="18" Height="14" />
+                            <Ellipse Margin="7,0,0,0">
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse" BasedOn="{StaticResource Dot}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DiscordHealthy}" Value="False">
+                                                <Setter Property="Fill" Value="{StaticResource Warn}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                        </StackPanel>
+                    </Border>
+                    <Border Width="1" Height="20" Background="{StaticResource Line}" Margin="6,0,8,0" />
                     <Button Style="{StaticResource Button.Icon}" Click="Logs_Click" ToolTip="Open logs folder"
                             WindowChrome.IsHitTestVisibleInChrome="True" AutomationProperties.Name="Open logs folder">
                         <ContentControl Style="{StaticResource Glyph}" Content="{StaticResource G.FolderOpen}" />
                     </Button>
                 </StackPanel>
-                <Button DockPanel.Dock="Right" Style="{StaticResource Button.Primary}" Height="30" Padding="14,0" FontSize="13" Margin="0,0,16,0"
-                        VerticalAlignment="Center" Click="UpdateAura_Click" IsEnabled="{Binding CanUpdate}" ToolTip="{Binding UpdateTip}"
-                        Visibility="{Binding UpdateText, Converter={StaticResource Shown}}" WindowChrome.IsHitTestVisibleInChrome="True"
-                        AutomationProperties.Name="{Binding UpdateText}">
-                    <TextBlock Text="{Binding UpdateText}" />
-                </Button>
                 <Border />
             </DockPanel>
         </Border>

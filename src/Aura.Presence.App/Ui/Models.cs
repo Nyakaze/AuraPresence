@@ -385,6 +385,9 @@ public sealed class MainModel : Observable
     private string? _updateText;
     private string? _updateTip;
     private bool _canUpdate;
+    private string? _checkText;
+    private string? _checkTip;
+    private bool _checking;
     private bool _showsBrowsers;
     private bool _browserConnected;
     private string _browserList = "";
@@ -446,6 +449,24 @@ public sealed class MainModel : Observable
         private set => Set(ref _canUpdate, value);
     }
 
+    public string? CheckText
+    {
+        get => _checkText;
+        private set => Set(ref _checkText, value);
+    }
+
+    public string? CheckTip
+    {
+        get => _checkTip;
+        private set => Set(ref _checkTip, value);
+    }
+
+    public bool Checking
+    {
+        get => _checking;
+        private set => Set(ref _checking, value);
+    }
+
     public bool ShowsBrowsers
     {
         get => _showsBrowsers;
@@ -491,6 +512,12 @@ public sealed class MainModel : Observable
         UpdateTip = app.AppUpdate is null ? null
             : app.AppUpdateError ?? $"Aura {app.AppUpdate.Version} is available. Aura downloads it and restarts.";
         CanUpdate = app.AppUpdate is not null && !app.AppUpdating;
+        CheckText = app.AppUpdate is not null ? null
+            : app.CheckingForUpdates ? "Checking…"
+            : app.CheckedForUpdatesAt is not null && !plugins.Any(plugin => app.UpdateFor(plugin) is not null) ? "Up to date"
+            : "Check for updates";
+        CheckTip = app.CheckedForUpdatesAt is { } checkedAt ? $"Checked for Aura and plugin updates at {checkedAt:t}. Click to check again." : "Check for Aura and plugin updates.";
+        Checking = app.CheckingForUpdates;
 
         var connected = BrowserBridge.Shared.Browsers;
         var known = BrowserBridge.Shared.KnownBrowsers.Union(connected).ToList();
@@ -857,7 +884,7 @@ public sealed class CatalogItem : Observable
 
     public bool Compatible => PluginStore.IsCompatible(Manifest.SdkVersion);
 
-    public bool CanInstall => !_busy && Compatible && (!IsInstalled || HasUpdate);
+    public bool CanInstall => !_busy && (Compatible ? !IsInstalled || HasUpdate : !App.Current.CheckingForUpdates && !App.Current.AppUpdating);
 
     public bool ShowsButton => !IsInstalled || HasUpdate || _busy;
 
@@ -865,7 +892,8 @@ public sealed class CatalogItem : Observable
         : Compatible ? $"Version {Manifest.ParsedVersion}" : "Needs a newer Aura";
 
     public string ActionText => _busy ? IsInstalled ? "Updating…" : "Installing…"
-        : !Compatible ? "Needs a newer Aura"
+        : !Compatible ? App.Current.AppUpdate is { } release ? $"Update Aura to {release.Version}"
+            : App.Current.CheckingForUpdates ? "Checking for Aura updates…" : "Check for Aura updates"
         : HasUpdate ? $"Update to {Manifest.ParsedVersion}" : "Install";
 
     public string? Error
@@ -882,6 +910,13 @@ public sealed class CatalogItem : Observable
     {
         if (!CanInstall)
             return;
+
+        if (!Compatible)
+        {
+            await (App.Current.AppUpdate is null ? App.Current.CheckForUpdatesAsync() : App.Current.UpdateAuraAsync());
+            Refresh();
+            return;
+        }
 
         _busy = true;
         Error = null;

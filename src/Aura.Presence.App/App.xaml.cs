@@ -111,6 +111,30 @@ public partial class App : Application
         }
     }
 
+    public bool CheckingForUpdates { get; private set; }
+
+    public DateTime? CheckedForUpdatesAt { get; private set; }
+
+    public async Task CheckForUpdatesAsync()
+    {
+        if (CheckingForUpdates)
+            return;
+
+        CheckingForUpdates = true;
+        QueueRefresh();
+
+        try
+        {
+            await Task.WhenAll(RefreshCatalogAsync(), CheckAppUpdateAsync(), Task.Delay(TimeSpan.FromSeconds(1)));
+        }
+        finally
+        {
+            CheckingForUpdates = false;
+            CheckedForUpdatesAt = DateTime.Now;
+            QueueRefresh();
+        }
+    }
+
     public async Task CheckAppUpdateAsync()
     {
         try
@@ -250,7 +274,7 @@ public partial class App : Application
         using var daily = new PeriodicTimer(TimeSpan.FromHours(24));
 
         do
-            await Task.WhenAll(RefreshCatalogAsync(), CheckAppUpdateAsync());
+            await CheckForUpdatesAsync();
         while (await daily.WaitForNextTickAsync());
     }
 
@@ -308,6 +332,8 @@ public partial class App : Application
 
         if (AppUpdate is { } release && !AppUpdating)
             menu.Items.Add(Item($"Update Aura to {release.Version}", () => _ = UpdateAuraAsync()));
+        else if (AppUpdate is null)
+            menu.Items.Add(Item(CheckingForUpdates ? "Checking for updates…" : "Check for updates", () => _ = CheckForUpdatesAsync()));
 
         menu.Items.Add(Item("One activity at a time", ToggleOneAtATime, isChecked: Arbiter.OneAtATime));
         menu.Items.Add(Item("Start with Windows", ToggleAutostart, isChecked: Autostart.IsEnabled));
