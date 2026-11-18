@@ -23,6 +23,7 @@
   <ItemGroup>
     <Using Include="System.IO" />
     <Resource Include="Ui\aura.ico" />
+    <None Include="..\..\extension\*" Link="extension\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

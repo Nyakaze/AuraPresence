@@ -6,6 +6,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using Aura.Presence.Sdk;
 
 namespace Aura.Presence.App.Ui;
 
@@ -40,6 +41,9 @@ public partial class AuraWindow : Window
 
         if (Page.Content is MarketDetailPage detail)
             detail.Item.Refresh();
+
+        if (Page.Content is PluginPage shown)
+            shown.Refresh();
 
         if (Page.Content is not PluginPage { IsCurrent: false } page)
             return;
@@ -221,6 +225,30 @@ public partial class AuraWindow : Window
     {
         if (Page.Content is PluginPage page)
             App.OpenFolder(page.Plugin.Loaded.Context.DataDirectory);
+    }
+
+    private void CopyExtensionPath_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Clipboard.SetText(Plugins.BrowserBridge.PrepareExtension());
+        }
+        catch (Exception exception) when (exception is System.Runtime.InteropServices.COMException or IOException or UnauthorizedAccessException)
+        {
+            AppLog.For("Ui").Warn("Copying the extension folder path failed.", exception);
+        }
+    }
+
+    private void OpenExtensionFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            App.OpenFolder(Plugins.BrowserBridge.PrepareExtension());
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            AppLog.For("Ui").Warn("Opening the extension folder failed.", exception);
+        }
     }
 
     private async void Reset_Click(object sender, RoutedEventArgs e)

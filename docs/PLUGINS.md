@@ -193,6 +193,19 @@ _subscription = context.Media.Subscribe(update => OnMediaAsync(update));
 - Handlers get every update from every source, your own included (`update.SourceId` is the publisher's `Id`). They run one after another, so return quickly and move slow work, such as a web request, to the background.
 - A plugin that never sets a status returns `false` from `ShowsActivity`. The window then lists it under Helpers.
 
+### Browser pages
+
+A plugin for a website reads it through `context.Browser`, which talks to the Aura browser extension (Chrome, Edge and other Chromium browsers). The extension only supplies data; everything about the site lives in your plugin.
+
+```csharp
+var page = context.Browser.PagesOn("www.netflix.com").FirstOrDefault(page => page.Video is not null);
+var json = page is null ? null : await context.Browser.FetchAsync(page, "/some/api?id=1", token);
+```
+
+- `PagesOn(host)` returns the open tabs on that exact host: URL, title, whether the tab is in front, and the playing `<video>`'s position, duration and paused state. Asking for a host is what makes the extension read it, so poll it (every couple of seconds) while your plugin runs. A host nobody asked for in a minute is dropped.
+- `FetchAsync(page, path)` runs a GET for a path on the page's own site inside that tab, with the user's sign-in, and returns the body, or `null` if it failed.
+- `IsConnected` says whether any browser has the extension running. Set `"requires": ["browserExtension"]` in your `plugin.json`, so the Marketplace says the plugin needs the extension and its page shows how to add it.
+
 ## 8. Shared services
 
 Aura ships these libraries and shares them with plugins. Reference them the same way as the SDK (`services\Aura.Presence.Services.<Name>\Aura.Presence.Services.<Name>.csproj`, with `Private="false" ExcludeAssets="runtime"`).
@@ -265,6 +278,7 @@ A repo is one `meta.json` at an https URL. Users add that URL in Aura under **Ma
 | `sha256`, `size` | The zip's checksum (required) and exact size in bytes. Aura refuses a download that is bigger than `size` or has a different checksum. |
 | `iconUrl` | A square PNG, 128 px. |
 | `description`, `category`, `uses`, `showsActivity`, `repoUrl`, `author` | Shown on the Marketplace. `uses` lists what the plugin reads or touches, so users know what they install. `category` is free text and fills the filter (empty means "Other"). |
+| `requires` | What the plugin needs besides Aura. `["browserExtension"]` means the Aura browser extension; the Marketplace and the plugin's page then explain how to add it. |
 
 Relative URLs resolve against the meta.json URL, and anything that isn't https is dropped. Aura skips an entry that is missing a required field and ignores unknown fields. Updates come only from the repo a plugin was installed from.
 
@@ -272,7 +286,7 @@ Relative URLs resolve against the meta.json URL, and anything that isn't https i
 
 AuraPlugins' tooling works for any GitHub repo. Copy `pack.cs`, `Directory.Build.props`, `plugins/Directory.Build.targets` and `.github/workflows/release.yml` from [AuraPlugins](https://github.com/Nyakaze/AuraPlugins), then:
 
-- Put each plugin in `plugins/<AssemblyName>/` with its `.csproj` (with a `<Version>`), an `icon.png` and a `plugin.json` holding the Marketplace fields (`name`, `author`, `description`, `category`, `uses`, `showsActivity`, `repoUrl`).
+- Put each plugin in `plugins/<AssemblyName>/` with its `.csproj` (with a `<Version>`), an `icon.png` and a `plugin.json` holding the Marketplace fields (`name`, `author`, `description`, `category`, `uses`, `requires`, `showsActivity`, `repoUrl`).
 - In `pack.cs`, change the repo `name` (it says `"Aura"`).
 - In `release.yml`, replace the checks step with your own checks, and set `AURA_REF` to the oldest Aura tag you support.
 - Your repo's meta.json URL is then `https://raw.githubusercontent.com/<you>/<repo>/main/meta.json`.

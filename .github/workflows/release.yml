@@ -39,6 +39,7 @@ jobs:
         run: |
           dotnet run HostChecks.cs
           dotnet run MarketChecks.cs
+          dotnet run BrowserChecks.cs
 
       - name: Publish
         working-directory: AuraPresence

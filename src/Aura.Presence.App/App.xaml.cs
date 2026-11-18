@@ -224,6 +224,7 @@ public partial class App : Application
             QueueRefresh();
         };
         Host.Changed += QueueRefresh;
+        BrowserBridge.Shared.Changed += QueueRefresh;
 
         _ = StartPluginsAsync();
         _ = Task.Run(() => AppUpdater.RemoveOldFiles(AppContext.BaseDirectory));

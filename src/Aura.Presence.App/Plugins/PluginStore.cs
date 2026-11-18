@@ -24,6 +24,10 @@ public sealed record PluginManifest
 
     public IReadOnlyList<string> Uses { get; init; } = [];
 
+    public IReadOnlyList<string> Requires { get; init; } = [];
+
+    public bool NeedsBrowserExtension => Requires.Contains(BrowserBridge.RequirementName, StringComparer.OrdinalIgnoreCase);
+
     public bool ShowsActivity { get; init; } = true;
 
     public string? IconUrl { get; init; }

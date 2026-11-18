@@ -712,6 +712,21 @@ public sealed class PluginPage : Observable
 
     public string UninstallQuestion => $"Uninstall {Plugin.Name}?";
 
+    public bool NeedsBrowser => Plugin.Loaded.Context.UsesBrowser || Plugin.Loaded.Manifest?.NeedsBrowserExtension == true;
+
+    public bool BrowserConnected => BrowserBridge.Shared.IsConnected;
+
+    public string BrowserStatus => BrowserBridge.Shared.Browsers is { Count: > 0 } browsers
+        ? $"Connected to {string.Join(" and ", browsers)}."
+        : "Not connected. Add it to the browser you watch in, and keep Aura running.";
+
+    public void Refresh()
+    {
+        Raise(nameof(NeedsBrowser));
+        Raise(nameof(BrowserConnected));
+        Raise(nameof(BrowserStatus));
+    }
+
     public async Task<bool> RunAsync(Func<Task> action)
     {
         Busy = true;
@@ -766,7 +781,9 @@ public sealed class CatalogItem : Observable
 
     public string Blurb => Manifest.Description ?? "";
 
-    public IReadOnlyList<string> Uses => Manifest.Uses;
+    public IReadOnlyList<string> Uses => Manifest.NeedsBrowserExtension
+        ? [.. Manifest.Uses, "The Aura browser extension, which you add once to Chrome, Edge or another Chromium browser"]
+        : Manifest.Uses;
 
     public object Icon { get; }
 

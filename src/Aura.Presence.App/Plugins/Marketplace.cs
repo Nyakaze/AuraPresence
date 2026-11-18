@@ -112,6 +112,7 @@ public sealed class Marketplace(JsonSettings settings)
                 IconUrl = Https(baseUri, plugin.IconUrl),
                 RepoUrl = Https(baseUri, plugin.RepoUrl),
                 Uses = plugin.Uses ?? [],
+                Requires = plugin.Requires ?? [],
                 InstalledFrom = null,
                 ScheduledForDeletion = false
             });

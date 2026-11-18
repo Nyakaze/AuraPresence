@@ -34,6 +34,17 @@ public sealed class PluginContext : IPluginContext, IActivityReporter
 
     public IMediaBus Media { get; }
 
+    public bool UsesBrowser { get; private set; }
+
+    public IBrowser Browser
+    {
+        get
+        {
+            UsesBrowser = true;
+            return BrowserBridge.Shared;
+        }
+    }
+
     public IPluginLog Log { get; }
 
     public string DataDirectory { get; }

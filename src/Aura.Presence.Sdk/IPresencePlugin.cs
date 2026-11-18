@@ -25,6 +25,8 @@ public interface IPluginContext
 
     IMediaBus Media { get; }
 
+    IBrowser Browser { get; }
+
     IPluginLog Log { get; }
 
     IPluginSettings Settings { get; }
