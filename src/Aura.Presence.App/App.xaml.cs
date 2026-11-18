@@ -16,6 +16,7 @@ public partial class App : Application
     private const string InstanceName = @"Local\AuraPresence.SingleInstance";
     private const string OpenSignalName = @"Local\AuraPresence.Open";
     private const int TooltipLimit = 127;
+    private const string OneAtATimeSetting = "oneActivityAtATime";
 
     private readonly AppLog _log = AppLog.For("App");
     private Mutex? _instance;
@@ -23,6 +24,7 @@ public partial class App : Application
     private RegisteredWaitHandle? _openWait;
     private TrayIcon? _tray;
     private AuraWindow? _window;
+    private JsonSettings _settings = null!;
     private int _refreshQueued;
     private int _catalogRun;
 
@@ -197,11 +199,12 @@ public partial class App : Application
             args.Handled = true;
         };
 
-        Arbiter = new ActivityArbiter();
+        _settings = new JsonSettings(AppPaths.SettingsFile);
+        Arbiter = new ActivityArbiter(DiscordPresenceOutput.SlotOf);
+        Arbiter.SetOneAtATime(_settings.Get(OneAtATimeSetting, false));
         Output = new DiscordPresenceOutput();
-        var settings = new JsonSettings(AppPaths.SettingsFile);
-        Host = new PluginHost(Arbiter, settings);
-        Market = new Marketplace(settings);
+        Host = new PluginHost(Arbiter, _settings);
+        Market = new Marketplace(_settings);
 
         _openSignal = new EventWaitHandle(false, EventResetMode.AutoReset, OpenSignalName);
         _openWait = ThreadPool.RegisterWaitForSingleObject(_openSignal, (_, _) => Dispatcher.InvokeAsync(OpenWindow),
@@ -211,9 +214,9 @@ public partial class App : Application
         _tray.Activated += OpenWindow;
         _tray.MenuRequested += ShowTrayMenu;
 
-        Arbiter.CurrentChanged += claim =>
+        Arbiter.ShownChanged += shown =>
         {
-            Output.Show(claim);
+            Output.Show(shown);
             QueueRefresh();
         };
         Output.StatusChanged += status =>
@@ -265,18 +268,20 @@ public partial class App : Application
 
     private void Refresh()
     {
-        var claim = Arbiter.Current;
+        var shown = Arbiter.Shown;
         var problem = !Output.Status.Healthy ||
                       Host.Plugins.Any(plugin => plugin.Enabled && plugin.Context.Health is PluginHealth.Degraded or PluginHealth.Failed);
 
-        _tray?.Update(claim is not null, problem, Tooltip(claim));
+        _tray?.Update(shown.Count > 0, problem, Tooltip(shown));
         _window?.Refresh();
     }
 
-    private string Tooltip(ActivityClaim? claim)
+    private string Showing(IReadOnlyList<ActivityClaim> shown) =>
+        shown.Count == 0 ? "Nothing to show" : string.Join("\n", shown.Select(claim => PresenceText.Showing(claim, NameOf(claim.SourceId))));
+
+    private string Tooltip(IReadOnlyList<ActivityClaim> shown)
     {
-        var name = AppUpdater.IsDevBuild ? "Aura (dev build)" : "Aura";
-        var text = claim is null ? $"{name} · Nothing to show" : $"{name} · {PresenceText.Showing(claim, NameOf(claim.SourceId))}";
+        var text = $"{(AppUpdater.IsDevBuild ? "Aura (dev build)" : "Aura")} · {Showing(shown)}";
 
         return text.Length <= TooltipLimit ? text : text[..(TooltipLimit - 1)] + "…";
     }
@@ -286,15 +291,14 @@ public partial class App : Application
         if (_tray is null)
             return;
 
-        var claim = Arbiter.Current;
-        var status = new TrayStatus(claim is null ? "Nothing to show" : PresenceText.Showing(claim, NameOf(claim.SourceId)),
-            claim is not null, PresenceText.Discord(Output.Status), Output.Status.Healthy);
+        var shown = Arbiter.Shown;
+        var status = new TrayStatus(Showing(shown), shown.Count > 0, PresenceText.Discord(Output.Status), Output.Status.Healthy);
 
         var menu = new ContextMenu();
         menu.Items.Add(new MenuItem { Header = status, Style = (Style)FindResource("Menu.Status") });
         menu.Items.Add(new Separator());
 
-        if (claim is not null)
+        foreach (var claim in shown)
         {
             var name = NameOf(claim.SourceId);
             menu.Items.Add(Item(Arbiter.PinnedSourceId == claim.SourceId ? $"Unpin {name}" : $"Pin {name}", () => TogglePin(claim.SourceId)));
@@ -305,6 +309,7 @@ public partial class App : Application
         if (AppUpdate is { } release && !AppUpdating)
             menu.Items.Add(Item($"Update Aura to {release.Version}", () => _ = UpdateAuraAsync()));
 
+        menu.Items.Add(Item("One activity at a time", ToggleOneAtATime, isChecked: Arbiter.OneAtATime));
         menu.Items.Add(Item("Start with Windows", ToggleAutostart, isChecked: Autostart.IsEnabled));
         menu.Items.Add(Item("Open logs folder", () => OpenFolder(AppPaths.Logs)));
         menu.Items.Add(new Separator());
@@ -319,6 +324,14 @@ public partial class App : Application
         item.Click += (_, _) => action();
 
         return item;
+    }
+
+    private void ToggleOneAtATime()
+    {
+        Arbiter.SetOneAtATime(!Arbiter.OneAtATime);
+        _settings.Set(OneAtATimeSetting, Arbiter.OneAtATime);
+        _log.Info($"One activity at a time: {(Arbiter.OneAtATime ? "on" : "off")}.");
+        QueueRefresh();
     }
 
     private void ToggleAutostart()

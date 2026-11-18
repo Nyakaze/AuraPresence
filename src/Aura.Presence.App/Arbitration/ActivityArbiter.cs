@@ -4,23 +4,25 @@ namespace Aura.Presence.App.Arbitration;
 
 public sealed record ActivityClaim(string SourceId, int Priority, PresenceActivity Activity, DateTimeOffset UpdatedAt);
 
-public sealed class ActivityArbiter
+public sealed class ActivityArbiter(Func<ActivityKind, int>? slotOf = null)
 {
     private readonly Lock _gate = new();
     private readonly Dictionary<string, ActivityClaim> _claims = new(StringComparer.Ordinal);
+    private readonly Func<ActivityKind, int> _slotOf = slotOf ?? (_ => 0);
 
     private string[] _order = [];
     private string? _pinnedSourceId;
-    private ActivityClaim? _current;
+    private bool _oneAtATime;
+    private ActivityClaim[] _shown = [];
 
-    public event Action<ActivityClaim?>? CurrentChanged;
+    public event Action<IReadOnlyList<ActivityClaim>>? ShownChanged;
 
-    public ActivityClaim? Current
+    public IReadOnlyList<ActivityClaim> Shown
     {
         get
         {
             lock (_gate)
-                return _current;
+                return _shown;
         }
     }
 
@@ -32,6 +34,17 @@ public sealed class ActivityArbiter
                 return _pinnedSourceId;
         }
     }
+
+    public bool OneAtATime
+    {
+        get
+        {
+            lock (_gate)
+                return _oneAtATime;
+        }
+    }
+
+    public int SlotOf(ActivityClaim claim) => _oneAtATime ? 0 : _slotOf(claim.Activity.Kind);
 
     public IReadOnlyList<ActivityClaim> Ranked()
     {
@@ -59,21 +72,26 @@ public sealed class ActivityArbiter
         UpdateAndNotify(() => _order = [.. sourceIds]);
     }
 
+    public void SetOneAtATime(bool on)
+    {
+        UpdateAndNotify(() => _oneAtATime = on);
+    }
+
     private void UpdateAndNotify(Action mutate)
     {
-        ActivityClaim? next;
+        ActivityClaim[] next;
         bool changed;
 
         lock (_gate)
         {
             mutate();
-            next = Rank().FirstOrDefault();
-            changed = !Equals(next, _current);
-            _current = next;
+            next = [.. Rank().DistinctBy(SlotOf)];
+            changed = !next.SequenceEqual(_shown);
+            _shown = next;
         }
 
         if (changed)
-            CurrentChanged?.Invoke(next);
+            ShownChanged?.Invoke(next);
     }
 
     private List<ActivityClaim> Rank() =>

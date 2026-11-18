@@ -152,7 +152,7 @@ Aura loads every public, non-abstract class that implements `IPresencePlugin` an
 
 Text is trimmed and cut at 128 characters with "…". Empty text is left out.
 
-**Which activity shows:** Discord shows one activity at a time. A source pinned by the user wins. After that comes the user's order (they drag plugins in the window, and `DefaultPriority` only sets where a new plugin starts), then the most recent report. Report when something changes, not on every poll. Discord accepts about 5 updates per 20 seconds, and Aura always sends the latest one.
+**Which activity shows:** Aura shows one Playing (or Competing) and one Watching (or Listening) activity side by side, unless the user turns on "One activity at a time" in the tray menu (since Aura 1.4; before, only one showed). When several plugins report the same kind, one wins: a source pinned by the user first. After that comes the user's order (they drag plugins in the window, and `DefaultPriority` only sets where a new plugin starts), then the most recent report. Report when something changes, not on every poll. Discord accepts about 5 updates per 20 seconds, and Aura always sends the latest one.
 
 ## 5. Health
 

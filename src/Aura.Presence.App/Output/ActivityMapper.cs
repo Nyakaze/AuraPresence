@@ -24,7 +24,7 @@ public static class ActivityMapper
                 ActivityKind.Competing => ActivityType.Competing,
                 _ => ActivityType.Playing
             },
-            Name = Text(activity.Name),
+            Name = Text(activity.Name) ?? "Aura",
             Details = Text(activity.Details),
             State = Text(activity.State),
             StartedAt = startedAt,

@@ -7,17 +7,20 @@ namespace Aura.Presence.App.Output;
 
 public sealed class DiscordPresenceOutput : IPresenceOutput
 {
-    private static readonly Snowflake AuraApplication = new(1516903509058916543);
+    private static readonly Snowflake[] Apps = [new(1572723734564053173), new(1516903509058916543)];
 
     private readonly AppLog _log = AppLog.For("Discord");
     private readonly CrovusLogBridge _crovusLog = new("Crovus");
     private readonly Lock _gate = new();
+    private readonly RichPresenceClient?[] _clients = new RichPresenceClient?[Apps.Length];
+    private readonly ActivityClaim?[] _sent = new ActivityClaim?[Apps.Length];
+    private readonly OutputStatus?[] _rejections = new OutputStatus?[Apps.Length];
 
-    private RichPresenceClient? _client;
     private OutputStatus _status = OutputStatus.Idle;
-    private OutputStatus? _rejection;
 
     public event Action<OutputStatus>? StatusChanged;
+
+    public static int SlotOf(ActivityKind kind) => kind is ActivityKind.Watching or ActivityKind.Listening ? 1 : 0;
 
     public OutputStatus Status
     {
@@ -28,14 +31,47 @@ public sealed class DiscordPresenceOutput : IPresenceOutput
         }
     }
 
-    public void Show(ActivityClaim? claim)
+    public void Show(IReadOnlyList<ActivityClaim> shown)
     {
+        for (var slot = 0; slot < Apps.Length; slot++)
+            Show(slot, shown.FirstOrDefault(claim => SlotOf(claim.Activity.Kind) == slot));
+
+        RefreshStatus();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        RichPresenceClient?[] clients;
+
+        lock (_gate)
+        {
+            clients = [.. _clients];
+            Array.Clear(_clients);
+        }
+
+        foreach (var client in clients)
+        {
+            if (client is not null)
+                await client.DisposeAsync();
+        }
+    }
+
+    private void Show(int slot, ActivityClaim? claim)
+    {
+        lock (_gate)
+        {
+            if (Equals(_sent[slot], claim))
+                return;
+
+            _sent[slot] = claim;
+        }
+
         if (claim is null)
         {
             lock (_gate)
-                _client?.ClearActivity();
+                _clients[slot]?.ClearActivity();
 
-            _log.Info("Presence cleared.");
+            _log.Info($"Cleared {Apps[slot]}.");
 
             return;
         }
@@ -52,58 +88,43 @@ public sealed class DiscordPresenceOutput : IPresenceOutput
 
         lock (_gate)
         {
-            _rejection = null;
-            Client().SetActivity(activity);
+            _rejections[slot] = null;
+            Client(slot).SetActivity(activity);
         }
 
-        _log.Info($"Showing '{claim.SourceId}': {activity.Type} {activity.Name} | {activity.Details} | {activity.State}");
-        RefreshStatus();
+        _log.Info($"Showing '{claim.SourceId}' on {Apps[slot]}: {activity.Type} {activity.Name} | {activity.Details} | {activity.State}");
     }
 
-    public async ValueTask DisposeAsync()
+    private RichPresenceClient Client(int slot)
     {
-        RichPresenceClient? client;
+        if (_clients[slot] is { } existing)
+            return existing;
 
-        lock (_gate)
-        {
-            client = _client;
-            _client = null;
-        }
-
-        if (client is not null)
-            await client.DisposeAsync();
-    }
-
-    private RichPresenceClient Client()
-    {
-        if (_client is not null)
-            return _client;
-
-        var client = new RichPresenceClient(RichPresenceClientOptions.For(AuraApplication), _crovusLog);
+        var client = new RichPresenceClient(RichPresenceClientOptions.For(Apps[slot]), _crovusLog);
         client.StateChanged += _ => RefreshStatus();
-        client.ActivityApplied += _ => OnApplied();
-        client.ActivityRejected += OnRejected;
+        client.ActivityApplied += _ => OnApplied(slot);
+        client.ActivityRejected += failure => OnRejected(slot, failure);
 
-        _client = client;
+        _clients[slot] = client;
         _ = client.StartAsync();
 
         return client;
     }
 
-    private void OnApplied()
+    private void OnApplied(int slot)
     {
         lock (_gate)
-            _rejection = null;
+            _rejections[slot] = null;
 
         RefreshStatus();
     }
 
-    private void OnRejected(RichPresenceFailure failure)
+    private void OnRejected(int slot, RichPresenceFailure failure)
     {
-        _log.Warn($"Discord rejected the activity: {failure.Message}");
+        _log.Warn($"Discord rejected the activity on {Apps[slot]}: {failure.Message}");
 
         lock (_gate)
-            _rejection = new OutputStatus($"Discord rejected the activity: {failure.Message}", false);
+            _rejections[slot] = new OutputStatus($"Discord rejected the activity: {failure.Message}", false);
 
         RefreshStatus();
     }
@@ -113,7 +134,12 @@ public sealed class DiscordPresenceOutput : IPresenceOutput
         OutputStatus next;
 
         lock (_gate)
-            next = _rejection ?? (_client is { } client ? Describe(client) : OutputStatus.Idle);
+            next = _clients
+                       .Select((client, slot) => _rejections[slot] ?? (client is null ? null : Describe(client)))
+                       .OfType<OutputStatus>()
+                       .OrderBy(status => status.Healthy)
+                       .FirstOrDefault()
+                   ?? OutputStatus.Idle;
 
         Publish(next);
     }

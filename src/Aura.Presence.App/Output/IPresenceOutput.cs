@@ -13,5 +13,5 @@ public interface IPresenceOutput : IAsyncDisposable
 
     OutputStatus Status { get; }
 
-    void Show(ActivityClaim? claim);
+    void Show(IReadOnlyList<ActivityClaim> shown);
 }

@@ -174,10 +174,10 @@ public sealed class PluginItem : Observable
         set => Set(ref _isDragging, value);
     }
 
-    public void Update(IReadOnlyList<ActivityClaim> ranked, Func<string, string> nameOf, CatalogEntry? update)
+    public void Update(IReadOnlyList<ActivityClaim> ranked, Func<ActivityClaim, int> slotOf, Func<string, string> nameOf, CatalogEntry? update)
     {
         IsOn = Loaded.Enabled;
-        (Status, Tone) = Describe(ranked, nameOf);
+        (Status, Tone) = Describe(ranked, slotOf, nameOf);
         AvailableUpdate = update;
     }
 
@@ -203,7 +203,7 @@ public sealed class PluginItem : Observable
         return image;
     }
 
-    private (string, Tone) Describe(IReadOnlyList<ActivityClaim> ranked, Func<string, string> nameOf)
+    private (string, Tone) Describe(IReadOnlyList<ActivityClaim> ranked, Func<ActivityClaim, int> slotOf, Func<string, string> nameOf)
     {
         if (!Loaded.Enabled)
             return ("Off", Tone.Normal);
@@ -221,13 +221,14 @@ public sealed class PluginItem : Observable
         if (!Loaded.Plugin.ShowsActivity)
             return (message ?? "Running.", Tone.Normal);
 
-        var winner = ranked.FirstOrDefault();
+        if (ranked.FirstOrDefault(claim => claim.SourceId == Id) is { } claim)
+        {
+            var winner = ranked.First(other => slotOf(other) == slotOf(claim));
 
-        if (winner?.SourceId == Id)
-            return ($"Showing {PresenceText.Short(winner.Activity)}", Tone.Live);
-
-        if (winner is not null && ranked.FirstOrDefault(claim => claim.SourceId == Id) is { } claim)
-            return ($"{PresenceText.Short(claim.Activity)}, behind {nameOf(winner.SourceId)}", Tone.Normal);
+            return winner == claim
+                ? ($"Showing {PresenceText.Short(claim.Activity)}", Tone.Live)
+                : ($"{PresenceText.Short(claim.Activity)}, behind {nameOf(winner.SourceId)}", Tone.Normal);
+        }
 
         return (message ?? "Waiting for activity.", Tone.Normal);
     }
@@ -308,13 +309,11 @@ public sealed class NowShowing : Observable
         private set => Set(ref _pinLabel, value);
     }
 
-    public void Update(IReadOnlyList<ActivityClaim> ranked, string? pinnedSourceId, Func<string, string> nameOf, object? icon)
+    public void Update(ActivityClaim winner, ActivityClaim? next, string? pinnedSourceId, Func<string, string> nameOf, object? icon)
     {
-        var winner = ranked[0];
         var activity = winner.Activity;
         var name = nameOf(winner.SourceId);
         var pinned = pinnedSourceId == winner.SourceId;
-        var next = ranked.Skip(1).FirstOrDefault();
 
         SourceId = winner.SourceId;
         Heading = PresenceText.Heading(activity, name);
@@ -323,7 +322,7 @@ public sealed class NowShowing : Observable
         Icon = icon;
         Button = activity.Buttons.FirstOrDefault()?.Label;
         PinLabel = pinned ? $"Unpin {name}" : $"Pin {name}";
-        Footnote = (pinned ? $"Pinned, so your order is ignored until you unpin {name}." : $"From {name}, first in your order.")
+        Footnote = (pinned ? $"Pinned, so your order is ignored until you unpin {name}." : $"From {name}.")
                    + (next is null ? "" : $" Next in line: {PresenceText.Short(next.Activity)}, from {nameOf(next.SourceId)}.");
         _startedAt = activity.StartedAt;
         ShowPoster(activity.LargeImage?.Key);
@@ -380,7 +379,6 @@ public sealed class BrowserSetup : Observable
 
 public sealed class MainModel : Observable
 {
-    private NowShowing? _now;
     private int _count;
     private string _discord = "";
     private bool _discordHealthy = true;
@@ -390,15 +388,18 @@ public sealed class MainModel : Observable
     private bool _showsBrowsers;
     private bool _browserConnected;
     private string _browserList = "";
+    private string _orderHint = "";
 
     public ObservableCollection<PluginItem> Sources { get; } = [];
 
     public ObservableCollection<PluginItem> Helpers { get; } = [];
 
-    public NowShowing? Now
+    public ObservableCollection<NowShowing> Now { get; } = [];
+
+    public string OrderHint
     {
-        get => _now;
-        private set => Set(ref _now, value);
+        get => _orderHint;
+        private set => Set(ref _orderHint, value);
     }
 
     public int Count
@@ -472,12 +473,15 @@ public sealed class MainModel : Observable
         Sync(Helpers, plugins.Where(plugin => !plugin.Plugin.ShowsActivity).ToList());
 
         foreach (var item in Sources.Concat(Helpers))
-            item.Update(ranked, app.NameOf, app.UpdateFor(item.Loaded));
+            item.Update(ranked, app.Arbiter.SlotOf, app.NameOf, app.UpdateFor(item.Loaded));
 
         for (var i = 0; i < Sources.Count; i++)
             Sources[i].MoveLabel = $"Move {Sources[i].Name}, {i + 1} of {Sources.Count}. Use the arrow keys.";
 
         Count = plugins.Count;
+        OrderHint = app.Arbiter.OneAtATime
+            ? "When two plugins have something to show, the higher one wins. Drag to change the order."
+            : "Watching and Playing show side by side. When two plugins show the same kind, the higher one wins. Drag to change the order.";
         Discord = PresenceText.Discord(app.Output.Status);
         DiscordHealthy = app.Output.Status.Healthy;
         UpdateText = app.AppUpdate is not { } release ? null
@@ -496,16 +500,20 @@ public sealed class MainModel : Observable
             : string.Join("\n", known.Select(name => $"{name} · {(connected.Contains(name) ? "connected" : "not running")}"));
         ShowsBrowsers = known.Count > 0 || Sources.Concat(Helpers).Any(item => item.NeedsBrowser);
 
-        if (ranked.Count == 0)
-        {
-            Now = null;
-            return;
-        }
+        var shown = ranked.DistinctBy(app.Arbiter.SlotOf).ToList();
 
-        var source = Sources.FirstOrDefault(item => item.Id == ranked[0].SourceId);
-        var now = Now ?? new NowShowing();
-        now.Update(ranked, app.Arbiter.PinnedSourceId, app.NameOf, source?.Icon);
-        Now = now;
+        while (Now.Count > shown.Count)
+            Now.RemoveAt(Now.Count - 1);
+
+        for (var i = 0; i < shown.Count; i++)
+        {
+            if (i == Now.Count)
+                Now.Add(new NowShowing());
+
+            var winner = shown[i];
+            var next = ranked.FirstOrDefault(claim => claim != winner && app.Arbiter.SlotOf(claim) == app.Arbiter.SlotOf(winner));
+            Now[i].Update(winner, next, app.Arbiter.PinnedSourceId, app.NameOf, Sources.FirstOrDefault(item => item.Id == winner.SourceId)?.Icon);
+        }
     }
 
     private static void Sync(ObservableCollection<PluginItem> items, List<LoadedPlugin> wanted)

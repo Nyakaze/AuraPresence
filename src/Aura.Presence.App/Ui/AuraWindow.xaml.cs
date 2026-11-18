@@ -22,7 +22,11 @@ public partial class AuraWindow : Window
     {
         InitializeComponent();
         DataContext = _model;
-        _clock.Tick += (_, _) => _model.Now?.Tick();
+        _clock.Tick += (_, _) =>
+        {
+            foreach (var now in _model.Now)
+                now.Tick();
+        };
         _clock.Start();
         Closed += (_, _) => _clock.Stop();
         Refresh();
@@ -212,8 +216,7 @@ public partial class AuraWindow : Window
 
     private void Pin_Click(object sender, RoutedEventArgs e)
     {
-        if (_model.Now is { } now)
-            App.Current.TogglePin(now.SourceId);
+        App.Current.TogglePin(ItemOf<NowShowing>(sender).SourceId);
     }
 
     private async void Toggle_Click(object sender, RoutedEventArgs e)

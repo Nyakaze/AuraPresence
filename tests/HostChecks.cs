@@ -16,19 +16,19 @@ var host = new PluginHost(arbiter, new JsonSettings(settingsFile));
 await host.StartAsync([new Second(), new First()]);
 
 Check(host.Plugins.Select(plugin => plugin.Id).SequenceEqual(["check-first", "check-second"]), "default priority seeds the order");
-Check(arbiter.Current?.SourceId == "check-first", "the first plugin in the order shows");
+Check(arbiter.Shown.FirstOrDefault()?.SourceId == "check-first", "the first plugin in the order shows");
 
 host.SetOrder(["check-second", "check-first"]);
-Check(arbiter.Current?.SourceId == "check-second", "a new order changes what shows at once");
+Check(arbiter.Shown.FirstOrDefault()?.SourceId == "check-second", "a new order changes what shows at once");
 
 var second = host.Plugins.Single(plugin => plugin.Id == "check-second");
 var before = (Probe)second.Plugin;
 await host.SetEnabledAsync(second, false);
-Check(before.Stopped && arbiter.Current?.SourceId == "check-first", "turning a plugin off stops it and hands over");
+Check(before.Stopped && arbiter.Shown.FirstOrDefault()?.SourceId == "check-first", "turning a plugin off stops it and hands over");
 
 await host.SetEnabledAsync(second, true);
 Check(second.Plugin is Probe { Started: true } fresh && fresh != before, "turning a plugin on starts a fresh instance");
-Check(arbiter.Current?.SourceId == "check-second", "the fresh instance takes its place again");
+Check(arbiter.Shown.FirstOrDefault()?.SourceId == "check-second", "the fresh instance takes its place again");
 
 second.Context.Settings.Set("label", "changed");
 await host.RestartAsync(second);
@@ -54,13 +54,24 @@ var removed = (Probe)reopened.Plugins[0].Plugin;
 await reopened.RemoveAsync([reopened.Plugins[0]]);
 Check(removed.Stopped && reopened.Plugins.Select(plugin => plugin.Id).SequenceEqual(["check-first", "check-third"]),
     "an uninstalled plugin stops and leaves the list");
-Check(reopenedArbiter.Current?.SourceId == "check-first", "the next plugin in line takes over");
+Check(reopenedArbiter.Shown.FirstOrDefault()?.SourceId == "check-first", "the next plugin in line takes over");
 await reopened.DisposeAsync();
 
 File.Delete(settingsFile);
 Directory.Delete(AppPaths.PluginDataFor("check-first"), recursive: true);
 Directory.Delete(AppPaths.PluginDataFor("check-second"), recursive: true);
 Directory.Delete(AppPaths.PluginDataFor("check-third"), recursive: true);
+
+var slots = new ActivityArbiter(DiscordPresenceOutput.SlotOf);
+slots.SetOrder(["check-watch", "check-compete", "check-play"]);
+slots.Submit("check-play", 0, new PresenceActivity { Kind = ActivityKind.Playing });
+slots.Submit("check-compete", 0, new PresenceActivity { Kind = ActivityKind.Competing });
+slots.Submit("check-watch", 0, new PresenceActivity { Kind = ActivityKind.Watching });
+Check(slots.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-watch", "check-compete"]), "the top activity of each slot shows");
+slots.Pin("check-play");
+Check(slots.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-play", "check-watch"]), "a pin wins its slot only");
+slots.SetOneAtATime(true);
+Check(slots.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-play"]), "one at a time shows only the top activity");
 
 var party = ActivityMapper.ToRichPresence(new PresenceActivity { State = "In a match", Party = new PresenceParty(3, 12) }).Party;
 Check(party is { Id: null, CurrentSize: 3, MaxSize: 12 }, "a party size reaches Discord");
