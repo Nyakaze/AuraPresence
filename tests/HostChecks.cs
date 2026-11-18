@@ -6,6 +6,7 @@
 using System.IO;
 using Aura.Presence.App;
 using Aura.Presence.App.Arbitration;
+using Aura.Presence.App.Output;
 using Aura.Presence.App.Plugins;
 using Aura.Presence.Sdk;
 
@@ -60,6 +61,11 @@ File.Delete(settingsFile);
 Directory.Delete(AppPaths.PluginDataFor("check-first"), recursive: true);
 Directory.Delete(AppPaths.PluginDataFor("check-second"), recursive: true);
 Directory.Delete(AppPaths.PluginDataFor("check-third"), recursive: true);
+
+var party = ActivityMapper.ToRichPresence(new PresenceActivity { State = "In a match", Party = new PresenceParty(3, 12) }).Party;
+Check(party is { Id: null, CurrentSize: 3, MaxSize: 12 }, "a party size reaches Discord");
+Check(ActivityMapper.ToRichPresence(new PresenceActivity { Party = new PresenceParty(5, 4) }).Party is null, "an overfull party is left out");
+Check(ActivityMapper.ToRichPresence(new PresenceActivity { Party = new PresenceParty(0, 4) }).Party is null, "an empty party is left out");
 
 Console.WriteLine("All host checks passed.");
 

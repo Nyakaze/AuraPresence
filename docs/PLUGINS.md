@@ -147,6 +147,7 @@ Aura loads every public, non-abstract class that implements `IPresencePlugin` an
 | `LargeImage`, `SmallImage` | `Key` is an image URL (at most 256 characters). `Text` is its hover caption. |
 | `StartedAt` | The elapsed timer. |
 | `EndsAt` | With `StartedAt`, the time left. It is dropped if it isn't after `StartedAt`. |
+| `Party` | "(3 of 12)" after the state line. `Size` must be at least 1 and `Max` at least `Size`, or it is left out. Since Aura 1.4. |
 | `Buttons` | At most 2. The label is cut at 32 characters, and the URL must be http(s) with at most 512 characters. |
 
 Text is trimmed and cut at 128 characters with "…". Empty text is left out.

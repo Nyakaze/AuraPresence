@@ -12,6 +12,8 @@ public sealed record PresenceButton(string Label, Uri Url);
 
 public sealed record PresenceImage(string Key, string? Text = null);
 
+public sealed record PresenceParty(int Size, int Max);
+
 public sealed record PresenceActivity
 {
     public ActivityKind Kind { get; init; } = ActivityKind.Playing;
@@ -29,6 +31,8 @@ public sealed record PresenceActivity
     public DateTimeOffset? StartedAt { get; init; }
 
     public DateTimeOffset? EndsAt { get; init; }
+
+    public PresenceParty? Party { get; init; }
 
     public IReadOnlyList<PresenceButton> Buttons { get; init; } = [];
 }

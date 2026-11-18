@@ -30,6 +30,9 @@ public static class ActivityMapper
             StartedAt = startedAt,
             EndsAt = endsAt,
             Assets = Assets(activity.LargeImage, activity.SmallImage),
+            Party = activity.Party is { Size: >= 1 } party && party.Max >= party.Size
+                ? new RichPresenceParty(CurrentSize: party.Size, MaxSize: party.Max)
+                : null,
             Buttons = activity.Buttons
                 .Where(button => IsUsableUrl(button.Url))
                 .Select(button => new RichPresenceButton(Truncate(button.Label.Trim(), RichPresenceLimits.ButtonLabel),
