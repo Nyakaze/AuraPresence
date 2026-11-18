@@ -40,6 +40,7 @@ Check(page is { Title: "Watching", Active: true } && page.Video == new BrowserVi
     $"page read: {page}");
 Check(bridge.PagesOn(host).Count == 1, "pages on other hosts are left out");
 Check(bridge.IsConnected && bridge.Browsers.SequenceEqual(["Test Browser"]), "browser name");
+Check(bridge.KnownBrowsers.Contains("Test Browser"), "a connected browser is remembered");
 
 var fetched = bridge.FetchAsync(page, "/api/title?id=1", CancellationToken.None);
 var request = await ReceiveAsync(socket, "fetch");

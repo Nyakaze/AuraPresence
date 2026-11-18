@@ -22,7 +22,10 @@ public sealed class BrowserBridge : IBrowser
     private static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(30);
 
+    private const string KnownBrowsersSetting = "browsers";
+
     private readonly AppLog _log = AppLog.For("Browser");
+    private readonly JsonSettings _seen = new(Path.Combine(AppPaths.DataRoot, "browser-extension.json"));
     private readonly Lock _gate = new();
     private readonly Dictionary<string, DateTimeOffset> _interest = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Connection> _connections = [];
@@ -59,6 +62,8 @@ public sealed class BrowserBridge : IBrowser
         }
     }
 
+    public IReadOnlyList<string> KnownBrowsers => _seen.Get<string[]>(KnownBrowsersSetting, []);
+
     public IReadOnlyList<BrowserPage> PagesOn(string host)
     {
         var now = DateTimeOffset.UtcNow;
@@ -66,7 +71,7 @@ public sealed class BrowserBridge : IBrowser
         lock (_gate)
             _interest[host] = now;
 
-        EnsureListening();
+        Start();
         _ = SyncHostsAsync();
 
         lock (_gate)
@@ -151,7 +156,7 @@ public sealed class BrowserBridge : IBrowser
             : null;
     }
 
-    private void EnsureListening()
+    public void Start()
     {
         lock (_gate)
         {
@@ -291,6 +296,11 @@ public sealed class BrowserBridge : IBrowser
                 var version = (string?)message["version"] ?? "";
                 connection.Browser = (string?)message["browser"] is { Length: > 0 } browser ? browser : "A browser";
                 _log.Info($"{connection.Browser} connected with extension {version}.");
+
+                lock (_gate)
+                    if (!KnownBrowsers.Contains(connection.Browser))
+                        _seen.Set(KnownBrowsersSetting, KnownBrowsers.Append(connection.Browser).ToArray());
+
                 Changed?.Invoke();
 
                 var current = ExtensionVersion(ExtensionFolder);

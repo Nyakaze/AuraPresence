@@ -126,6 +126,8 @@ public sealed class PluginItem : Observable
 
     public bool CanUninstall => Loaded.Manifest is not null;
 
+    public bool NeedsBrowser => Loaded.Context.UsesBrowser || Loaded.Manifest?.NeedsBrowserExtension == true;
+
     public CatalogEntry? AvailableUpdate
     {
         get => _update;
@@ -355,6 +357,27 @@ public sealed class NowShowing : Observable
     }
 }
 
+public sealed class BrowserSetup : Observable
+{
+    public static BrowserSetup Shared { get; } = new();
+
+    public bool Connected => BrowserBridge.Shared.IsConnected;
+
+    public bool Known => Connected || BrowserBridge.Shared.KnownBrowsers.Count > 0;
+
+    public string Status => BrowserBridge.Shared switch
+    {
+        { Browsers: { Count: > 0 } connected } => $"Connected to {string.Join(" and ", connected)}.",
+        { KnownBrowsers: { Count: > 0 } known } =>
+            $"Added to {string.Join(" and ", known)}, which {(known.Count == 1 ? "isn’t" : "aren’t")} running right now.",
+        _ => "Not added to a browser yet."
+    };
+
+    public string CardText => Known ? "Aura browser extension added" : "Needs the Aura browser extension";
+
+    public void Refresh() => Raise(string.Empty);
+}
+
 public sealed class MainModel : Observable
 {
     private NowShowing? _now;
@@ -364,6 +387,9 @@ public sealed class MainModel : Observable
     private string? _updateText;
     private string? _updateTip;
     private bool _canUpdate;
+    private bool _showsBrowsers;
+    private bool _browserConnected;
+    private string _browserList = "";
 
     public ObservableCollection<PluginItem> Sources { get; } = [];
 
@@ -419,6 +445,24 @@ public sealed class MainModel : Observable
         private set => Set(ref _canUpdate, value);
     }
 
+    public bool ShowsBrowsers
+    {
+        get => _showsBrowsers;
+        private set => Set(ref _showsBrowsers, value);
+    }
+
+    public bool BrowserConnected
+    {
+        get => _browserConnected;
+        private set => Set(ref _browserConnected, value);
+    }
+
+    public string BrowserList
+    {
+        get => _browserList;
+        private set => Set(ref _browserList, value);
+    }
+
     public void Update(App app)
     {
         var plugins = app.Host.Plugins;
@@ -443,6 +487,14 @@ public sealed class MainModel : Observable
         UpdateTip = app.AppUpdate is null ? null
             : app.AppUpdateError ?? $"Aura {app.AppUpdate.Version} is available. Aura downloads it and restarts.";
         CanUpdate = app.AppUpdate is not null && !app.AppUpdating;
+
+        var connected = BrowserBridge.Shared.Browsers;
+        var known = BrowserBridge.Shared.KnownBrowsers.Union(connected).ToList();
+        BrowserConnected = connected.Count > 0;
+        BrowserList = known.Count == 0
+            ? "Not added to a browser yet."
+            : string.Join("\n", known.Select(name => $"{name} · {(connected.Contains(name) ? "connected" : "not running")}"));
+        ShowsBrowsers = known.Count > 0 || Sources.Concat(Helpers).Any(item => item.NeedsBrowser);
 
         if (ranked.Count == 0)
         {
@@ -712,20 +764,9 @@ public sealed class PluginPage : Observable
 
     public string UninstallQuestion => $"Uninstall {Plugin.Name}?";
 
-    public bool NeedsBrowser => Plugin.Loaded.Context.UsesBrowser || Plugin.Loaded.Manifest?.NeedsBrowserExtension == true;
+    public bool NeedsBrowser => Plugin.NeedsBrowser;
 
-    public bool BrowserConnected => BrowserBridge.Shared.IsConnected;
-
-    public string BrowserStatus => BrowserBridge.Shared.Browsers is { Count: > 0 } browsers
-        ? $"Connected to {string.Join(" and ", browsers)}."
-        : "Not connected. Add it to the browser you watch in, and keep Aura running.";
-
-    public void Refresh()
-    {
-        Raise(nameof(NeedsBrowser));
-        Raise(nameof(BrowserConnected));
-        Raise(nameof(BrowserStatus));
-    }
+    public void Refresh() => Raise(nameof(NeedsBrowser));
 
     public async Task<bool> RunAsync(Func<Task> action)
     {
@@ -781,9 +822,9 @@ public sealed class CatalogItem : Observable
 
     public string Blurb => Manifest.Description ?? "";
 
-    public IReadOnlyList<string> Uses => Manifest.NeedsBrowserExtension
-        ? [.. Manifest.Uses, "The Aura browser extension, which you add once to Chrome, Edge or another Chromium browser"]
-        : Manifest.Uses;
+    public IReadOnlyList<string> Uses => Manifest.Uses;
+
+    public bool NeedsBrowserExtension => Manifest.NeedsBrowserExtension;
 
     public object Icon { get; }
 

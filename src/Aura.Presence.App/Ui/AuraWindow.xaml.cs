@@ -38,6 +38,7 @@ public partial class AuraWindow : Window
         _model.Update(App.Current);
         _market.Update(App.Current);
         _repos.Update(App.Current);
+        BrowserSetup.Shared.Refresh();
 
         if (Page.Content is MarketDetailPage detail)
             detail.Item.Refresh();
@@ -231,6 +232,7 @@ public partial class AuraWindow : Window
     {
         try
         {
+            Plugins.BrowserBridge.Shared.Start();
             Clipboard.SetText(Plugins.BrowserBridge.PrepareExtension());
         }
         catch (Exception exception) when (exception is System.Runtime.InteropServices.COMException or IOException or UnauthorizedAccessException)
@@ -243,6 +245,7 @@ public partial class AuraWindow : Window
     {
         try
         {
+            Plugins.BrowserBridge.Shared.Start();
             App.OpenFolder(Plugins.BrowserBridge.PrepareExtension());
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
