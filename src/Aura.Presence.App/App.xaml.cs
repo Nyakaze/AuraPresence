@@ -274,7 +274,8 @@ public partial class App : Application
 
     private string Tooltip(ActivityClaim? claim)
     {
-        var text = claim is null ? "Aura · Nothing to show" : $"Aura · {PresenceText.Showing(claim, NameOf(claim.SourceId))}";
+        var name = AppUpdater.IsDevBuild ? "Aura (dev build)" : "Aura";
+        var text = claim is null ? $"{name} · Nothing to show" : $"{name} · {PresenceText.Showing(claim, NameOf(claim.SourceId))}";
 
         return text.Length <= TooltipLimit ? text : text[..(TooltipLimit - 1)] + "…";
     }

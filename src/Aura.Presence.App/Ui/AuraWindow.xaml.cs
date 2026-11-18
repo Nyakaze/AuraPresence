@@ -189,6 +189,8 @@ public partial class AuraWindow : Window
 
     private void Logs_Click(object sender, RoutedEventArgs e) => App.OpenFolder(AppPaths.Logs);
 
+    private void AppFolder_Click(object sender, RoutedEventArgs e) => App.OpenFolder(AppUpdater.InstallDirectory);
+
     private void Link_Click(object sender, RoutedEventArgs e) => App.OpenFolder(ItemOf<LinkItem>(sender).Url.AbsoluteUri);
 
     private void Text_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)

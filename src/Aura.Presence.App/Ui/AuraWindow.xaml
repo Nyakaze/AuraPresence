@@ -648,8 +648,14 @@
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,20,0">
                     <Path Data="{StaticResource G.Ring}" Fill="{StaticResource Action}" Width="20" Height="20" Stretch="Uniform" />
                     <TextBlock Text="Aura" FontSize="17" FontWeight="SemiBold" Margin="10,0,0,0" VerticalAlignment="Center" />
-                    <TextBlock Text="{Binding AppVersion}" FontFamily="{StaticResource MonoFont}" FontSize="12" Foreground="{StaticResource Muted}"
-                               Margin="8,3,0,0" VerticalAlignment="Center" />
+                    <Button Style="{StaticResource Button.Text}" Margin="6,3,0,0" Padding="2,0" VerticalAlignment="Center" Click="AppFolder_Click"
+                            ToolTip="{Binding AppLocation}" AutomationProperties.Name="{Binding AppLocation}" WindowChrome.IsHitTestVisibleInChrome="True">
+                        <TextBlock Text="{Binding AppVersion}" FontFamily="{StaticResource MonoFont}" FontSize="12" FontWeight="Normal" />
+                    </Button>
+                    <Border Style="{StaticResource Tag}" Margin="8,2,0,0" BorderBrush="{StaticResource Warn}" ToolTip="{Binding AppLocation}"
+                            Visibility="{Binding IsDevBuild, Converter={StaticResource Shown}}">
+                        <TextBlock Text="Dev build" Foreground="{StaticResource Warn}" VerticalAlignment="Center" />
+                    </Border>
                 </StackPanel>
                 <RadioButton x:Name="InstalledTab" DockPanel.Dock="Left" Style="{StaticResource Tab}" GroupName="Tabs"
                              WindowChrome.IsHitTestVisibleInChrome="True"

@@ -32,8 +32,16 @@ public static class AppUpdater
 
     public static Version Current { get; } = PluginManifest.Normalize(typeof(AppUpdater).Assembly.GetName().Version);
 
+    public static string InstallDirectory { get; } = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
+
+    public static bool IsDevBuild { get; } =
+        InstallDirectory.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
+
     public static async Task<AppRelease?> CheckAsync(CancellationToken cancellationToken = default)
     {
+        if (IsDevBuild)
+            return null;
+
         var release = Parse(await Marketplace.GetStringAsync(LatestUrl, cancellationToken));
 
         return release.ParsedVersion > Current ? release : null;
