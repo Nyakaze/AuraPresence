@@ -2,8 +2,13 @@ namespace Aura.Presence.App;
 
 public static class AppPaths
 {
+    public static bool IsDevBuild { get; } =
+        AppContext.BaseDirectory.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
+
+    public static string InstanceSuffix { get; } = IsDevBuild ? ".Dev" : "";
+
     public static string DataRoot { get; } = EnsureDirectory(
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AuraPresence"));
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AuraPresence" + InstanceSuffix));
 
     public static string Logs { get; } = EnsureDirectory(Path.Combine(DataRoot, "logs"));
 

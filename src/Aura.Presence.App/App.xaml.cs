@@ -13,8 +13,8 @@ namespace Aura.Presence.App;
 
 public partial class App : Application
 {
-    private const string InstanceName = @"Local\AuraPresence.SingleInstance";
-    private const string OpenSignalName = @"Local\AuraPresence.Open";
+    private static readonly string InstanceName = $@"Local\AuraPresence{AppPaths.InstanceSuffix}.SingleInstance";
+    private static readonly string OpenSignalName = $@"Local\AuraPresence{AppPaths.InstanceSuffix}.Open";
     private const int TooltipLimit = 127;
     private const string OneAtATimeSetting = "oneActivityAtATime";
 
@@ -255,6 +255,9 @@ public partial class App : Application
 
         _ = StartPluginsAsync();
         _ = Task.Run(() => AppUpdater.RemoveOldFiles(AppContext.BaseDirectory));
+
+        if (AppPaths.IsDevBuild)
+            OpenWindow();
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -336,7 +339,8 @@ public partial class App : Application
             menu.Items.Add(Item(CheckingForUpdates ? "Checking for updates…" : "Check for updates", () => _ = CheckForUpdatesAsync()));
 
         menu.Items.Add(Item("One activity at a time", ToggleOneAtATime, isChecked: Arbiter.OneAtATime));
-        menu.Items.Add(Item("Start with Windows", ToggleAutostart, isChecked: Autostart.IsEnabled));
+        if (!AppPaths.IsDevBuild)
+            menu.Items.Add(Item("Start with Windows", ToggleAutostart, isChecked: Autostart.IsEnabled));
         menu.Items.Add(Item("Open logs folder", () => OpenFolder(AppPaths.Logs)));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Exit", () => _ = ExitAsync()));

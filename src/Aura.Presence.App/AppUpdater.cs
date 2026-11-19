@@ -34,8 +34,7 @@ public static class AppUpdater
 
     public static string InstallDirectory { get; } = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
 
-    public static bool IsDevBuild { get; } =
-        InstallDirectory.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
+    public static bool IsDevBuild => AppPaths.IsDevBuild;
 
     public static async Task<AppRelease?> CheckAsync(CancellationToken cancellationToken = default)
     {

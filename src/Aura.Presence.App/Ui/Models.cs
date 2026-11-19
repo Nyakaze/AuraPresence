@@ -428,7 +428,7 @@ public sealed class MainModel : Observable
     public bool IsDevBuild => AppUpdater.IsDevBuild;
 
     public string AppLocation { get; } = (AppUpdater.IsDevBuild
-        ? "Dev build: it doesn’t update itself. Your installed Aura is a different copy. "
+        ? $"Dev build: it runs next to your installed Aura with its own settings in {AppPaths.DataRoot}, and doesn’t update itself. "
         : "") + $"Running from {AppUpdater.InstallDirectory}. Click to open the folder.";
 
     public string? UpdateText
