@@ -273,7 +273,7 @@ A repo is one `meta.json` at an https URL. Users add that URL in Aura under **Ma
 | `name`, `url` | The repo's name in the Repos list, and its home page. |
 | `internalName` | The assembly name. Required. An entry using an official plugin's name is skipped. |
 | `name` | The display name. Required. |
-| `version` | Required. A higher version than the installed one shows as an update. Aura checks at startup and every 24 hours, and the user clicks Update. |
+| `version` | Required. A higher version than the installed one shows as an update. Aura checks at startup and every hour. Updates from your repo wait for the user to click Update; only the official repo's install by themselves. |
 | `sdkVersion` | The Aura API version you built against, as major.minor. Aura loads the plugin only when the major is the same and its own minor is at least this one. Without it the plugin never loads. |
 | `downloadUrl` | The zip. Required, https. |
 | `sha256`, `size` | The zip's checksum (required) and exact size in bytes. Aura refuses a download that is bigger than `size` or has a different checksum. |

@@ -17,6 +17,7 @@ public partial class App : Application
     private static readonly string OpenSignalName = $@"Local\AuraPresence{AppPaths.InstanceSuffix}.Open";
     private const int TooltipLimit = 127;
     private const string OneAtATimeSetting = "oneActivityAtATime";
+    private const string AutoUpdateSetting = "autoUpdate";
 
     private readonly AppLog _log = AppLog.For("App");
     private Mutex? _instance;
@@ -27,6 +28,7 @@ public partial class App : Application
     private JsonSettings _settings = null!;
     private int _refreshQueued;
     private int _catalogRun;
+    private readonly HashSet<string> _triedUpdates = [];
 
     public static new App Current => (App)Application.Current;
 
@@ -115,6 +117,8 @@ public partial class App : Application
 
     public DateTime? CheckedForUpdatesAt { get; private set; }
 
+    public bool AutoUpdate => _settings.Get(AutoUpdateSetting, true);
+
     public async Task CheckForUpdatesAsync()
     {
         if (CheckingForUpdates)
@@ -133,6 +137,33 @@ public partial class App : Application
             CheckedForUpdatesAt = DateTime.Now;
             QueueRefresh();
         }
+
+        if (AutoUpdate && _window is null)
+            await InstallUpdatesAsync();
+    }
+
+    private async Task InstallUpdatesAsync()
+    {
+        var updates = Host.Plugins.Select(plugin => plugin.Manifest is { } manifest ? Marketplace.AutoUpdateFor(manifest, Catalog) : null)
+            .OfType<CatalogEntry>().ToList();
+
+        foreach (var update in updates)
+        {
+            if (!_triedUpdates.Add($"{update.Manifest.InternalName} {update.Manifest.Version}"))
+                continue;
+
+            try
+            {
+                await InstallAsync(update);
+            }
+            catch (Exception exception) when (CatalogItem.IsExpected(exception))
+            {
+                _log.Error($"Updating '{update.Manifest.InternalName}' to {update.Manifest.Version} automatically failed; it waits for a click.", exception);
+            }
+        }
+
+        if (_window is null && AppUpdate is { } release && _triedUpdates.Add($"Aura {release.Version}"))
+            await UpdateAuraAsync();
     }
 
     public async Task CheckAppUpdateAsync()
@@ -274,11 +305,11 @@ public partial class App : Application
         _log.Info($"Aura started (API {PluginStore.ApiVersion.ToString(2)}).");
         await Host.StartAsync(PluginLoader.LoadAll(AppPaths.DevPlugins, AppPaths.Plugins));
 
-        using var daily = new PeriodicTimer(TimeSpan.FromHours(24));
+        using var hourly = new PeriodicTimer(TimeSpan.FromHours(1));
 
         do
             await CheckForUpdatesAsync();
-        while (await daily.WaitForNextTickAsync());
+        while (await hourly.WaitForNextTickAsync());
     }
 
     private void QueueRefresh()
@@ -338,6 +369,8 @@ public partial class App : Application
         else if (AppUpdate is null)
             menu.Items.Add(Item(CheckingForUpdates ? "Checking for updates…" : "Check for updates", () => _ = CheckForUpdatesAsync()));
 
+        menu.Items.Add(Item("Update automatically", ToggleAutoUpdate, isChecked: AutoUpdate));
+
         menu.Items.Add(Item("One activity at a time", ToggleOneAtATime, isChecked: Arbiter.OneAtATime));
         if (!AppPaths.IsDevBuild)
             menu.Items.Add(Item("Start with Windows", ToggleAutostart, isChecked: Autostart.IsEnabled));
@@ -362,6 +395,16 @@ public partial class App : Application
         _settings.Set(OneAtATimeSetting, Arbiter.OneAtATime);
         _log.Info($"One activity at a time: {(Arbiter.OneAtATime ? "on" : "off")}.");
         QueueRefresh();
+    }
+
+    private void ToggleAutoUpdate()
+    {
+        _settings.Set(AutoUpdateSetting, !AutoUpdate);
+        _log.Info($"Update automatically: {(AutoUpdate ? "on" : "off")}.");
+        QueueRefresh();
+
+        if (AutoUpdate)
+            _ = CheckForUpdatesAsync();
     }
 
     private void ToggleAutostart()

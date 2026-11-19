@@ -510,13 +510,15 @@ public sealed class MainModel : Observable
             : app.AppUpdateError is not null ? "Update failed · retry"
             : $"Update to {release.Version}";
         UpdateTip = app.AppUpdate is null ? null
-            : app.AppUpdateError ?? $"Aura {app.AppUpdate.Version} is available. Aura downloads it and restarts.";
+            : app.AppUpdateError ?? $"Aura {app.AppUpdate.Version} is available. Aura downloads it and restarts" +
+              (app.AutoUpdate ? ", by itself while this window is closed." : ".");
         CanUpdate = app.AppUpdate is not null && !app.AppUpdating;
         CheckText = app.AppUpdate is not null ? null
             : app.CheckingForUpdates ? "Checking…"
             : app.CheckedForUpdatesAt is not null && !plugins.Any(plugin => app.UpdateFor(plugin) is not null) ? "Up to date"
             : "Check for updates";
-        CheckTip = app.CheckedForUpdatesAt is { } checkedAt ? $"Checked for Aura and plugin updates at {checkedAt:t}. Click to check again." : "Check for Aura and plugin updates.";
+        CheckTip = (app.CheckedForUpdatesAt is { } checkedAt ? $"Checked for Aura and plugin updates at {checkedAt:t}. Click to check again." : "Check for Aura and plugin updates.") +
+                   (app.AutoUpdate ? "\nAura and official plugins update by themselves while this window is closed." : "");
         Checking = app.CheckingForUpdates;
 
         var connected = BrowserBridge.Shared.Browsers;

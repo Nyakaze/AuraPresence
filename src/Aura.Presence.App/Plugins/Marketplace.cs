@@ -158,6 +158,9 @@ public sealed class Marketplace(JsonSettings settings)
             ? source
             : null;
 
+    public static CatalogEntry? AutoUpdateFor(PluginManifest installed, IReadOnlyList<CatalogEntry> catalog, Version? api = null) =>
+        UpdateFor(installed, catalog, api) is { Repo.Official: true } update ? update : null;
+
     public static Task<byte[]> DownloadAsync(PluginManifest plugin, CancellationToken cancellationToken = default) =>
         DownloadAsync(plugin.DownloadUrl!, plugin.Size, cancellationToken);
 

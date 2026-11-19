@@ -67,6 +67,9 @@ Check(Marketplace.UpdateFor(installedExtra, catalog, new Version(1, 1))?.Repo ==
 Check(Marketplace.UpdateFor(installedExtra, catalog, new Version(1, 0)) is null, "an update needing a newer API isn't offered");
 Check(Marketplace.UpdateFor(Entry("Stremio", "1.0.0") with { InstalledFrom = custom.MetaUrl }, catalog, api) is null, "no update when versions match");
 Check(Marketplace.UpdateFor(Entry("Stremio", "0.9.0") with { InstalledFrom = custom.MetaUrl }, catalog, api)?.Repo.Official == true, "the official repo can always update");
+Check(Marketplace.AutoUpdateFor(Entry("Stremio", "0.9.0"), catalog, api)?.Repo.Official == true &&
+      Marketplace.AutoUpdateFor(installedExtra, catalog, new Version(1, 1)) is null,
+    "official updates install by themselves, third-party ones wait for a click");
 
 var root = Path.Combine(Path.GetTempPath(), $"aura-market-checks-{Guid.NewGuid():N}");
 var assemblyBytes = File.ReadAllBytes(typeof(IPresencePlugin).Assembly.Location);
