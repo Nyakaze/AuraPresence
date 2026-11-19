@@ -8,6 +8,7 @@ namespace Aura.Presence.App.Output;
 public sealed class DiscordPresenceOutput : IPresenceOutput
 {
     private static readonly Snowflake[] Apps = [new(1572723734564053173), new(1516903509058916543)];
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(10);
 
     private readonly AppLog _log = AppLog.For("Discord");
     private readonly CrovusLogBridge _crovusLog = new("Crovus");
@@ -100,7 +101,8 @@ public sealed class DiscordPresenceOutput : IPresenceOutput
         if (_clients[slot] is { } existing)
             return existing;
 
-        var client = new RichPresenceClient(RichPresenceClientOptions.For(Apps[slot]), _crovusLog);
+        var client = new RichPresenceClient(RichPresenceClientOptions.For(Apps[slot]) with { RefreshInterval = RefreshInterval },
+            _crovusLog);
         client.StateChanged += _ => RefreshStatus();
         client.ActivityApplied += _ => OnApplied(slot);
         client.ActivityRejected += failure => OnRejected(slot, failure);

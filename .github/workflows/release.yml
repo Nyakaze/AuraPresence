@@ -10,7 +10,7 @@ permissions:
 concurrency: release
 
 env:
-  CROVUS_REF: d6df9aa443371f350da03da46f8a52346e684418
+  CROVUS_REF: 91be6a5e48a1f6f48426c5348eacf6a246e08b44
 
 defaults:
   run:
