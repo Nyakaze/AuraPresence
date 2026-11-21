@@ -73,6 +73,24 @@ Check(slots.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-play", "
 slots.SetOneAtATime(true);
 Check(slots.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-play"]), "one at a time shows only the top activity");
 
+var games = new ActivityArbiter(DiscordPresenceOutput.SlotOf);
+games.SetOrder(["check-watch", "check-first-game", "check-second-game"]);
+games.Submit("check-first-game", 0, new PresenceActivity { Kind = ActivityKind.Playing });
+games.Submit("check-second-game", 0, new PresenceActivity { Kind = ActivityKind.Playing });
+games.Submit("check-watch", 0, new PresenceActivity { Kind = ActivityKind.Watching });
+games.Foreground("check-second-game");
+Check(games.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-watch", "check-second-game"]), "the game in front beats the order");
+games.Foreground("check-first-game");
+games.Foreground("check-browser");
+Check(games.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-watch", "check-first-game"]), "the game last in front stays");
+games.Pin("check-second-game");
+Check(games.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-second-game", "check-watch"]), "a pin beats the foreground");
+games.Pin(null);
+games.SetOneAtATime(true);
+Check(games.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-watch"]), "one at a time keeps a higher Watching plugin above the games");
+games.SetOrder(["check-second-game", "check-watch", "check-first-game"]);
+Check(games.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-first-game"]), "one at a time puts the game in front at the highest game's place");
+
 var party = ActivityMapper.ToRichPresence(new PresenceActivity { State = "In a match", Party = new PresenceParty(3, 12) }).Party;
 Check(party is { Id: null, CurrentSize: 3, MaxSize: 12 }, "a party size reaches Discord");
 Check(ActivityMapper.ToRichPresence(new PresenceActivity { Party = new PresenceParty(5, 4) }).Party is null, "an overfull party is left out");

@@ -26,6 +26,8 @@ public sealed record PluginManifest
 
     public IReadOnlyList<string> Requires { get; init; } = [];
 
+    public IReadOnlyList<string> Processes { get; init; } = [];
+
     public bool NeedsBrowserExtension => Requires.Contains(BrowserBridge.RequirementName, StringComparer.OrdinalIgnoreCase);
 
     public bool ShowsActivity { get; init; } = true;

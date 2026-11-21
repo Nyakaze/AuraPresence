@@ -24,6 +24,9 @@ internal static class Native
     public const int AllowAnyProcess = -1;
     public const int DwmUseImmersiveDarkMode = 20;
     public const int DwmBorderColor = 34;
+    public const int EventSystemForeground = 3;
+
+    public delegate void WinEventProc(IntPtr hook, int eventType, IntPtr window, int objectId, int childId, int thread, int time);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct NotifyIconData
@@ -56,6 +59,16 @@ internal static class Native
 
     [DllImport("user32.dll")]
     public static extern bool AllowSetForegroundWindow(int processId);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr SetWinEventHook(int eventMin, int eventMax, IntPtr module, WinEventProc callback, int processId,
+        int threadId, int flags);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    public static extern int GetWindowThreadProcessId(IntPtr window, out int processId);
 
     [DllImport("user32.dll")]
     public static extern int GetSystemMetrics(int index);

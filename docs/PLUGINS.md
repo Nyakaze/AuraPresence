@@ -280,6 +280,7 @@ A repo is one `meta.json` at an https URL. Users add that URL in Aura under **Ma
 | `iconUrl` | A square PNG, 128 px. |
 | `description`, `category`, `uses`, `showsActivity`, `repoUrl`, `author` | Shown on the Marketplace. `uses` lists what the plugin reads or touches, so users know what they install. `category` is free text and fills the filter (empty means "Other"). |
 | `requires` | What the plugin needs besides Aura. `["browserExtension"]` means the Aura browser extension; the Marketplace and the plugin's page then explain how to add it. |
+| `processes` | For games: the process names whose windows are the game, without `.exe`, e.g. `["VALORANT-Win64-Shipping"]`. When several games show Playing, the one last in the foreground wins over the plugin order; a pin still wins. |
 
 Relative URLs resolve against the meta.json URL, and anything that isn't https is dropped. Aura skips an entry that is missing a required field and ignores unknown fields. Updates come only from the repo a plugin was installed from.
 
@@ -287,7 +288,7 @@ Relative URLs resolve against the meta.json URL, and anything that isn't https i
 
 AuraPlugins' tooling works for any GitHub repo. Copy `pack.cs`, `Directory.Build.props`, `plugins/Directory.Build.targets` and `.github/workflows/release.yml` from [AuraPlugins](https://github.com/Nyakaze/AuraPlugins), then:
 
-- Put each plugin in `plugins/<AssemblyName>/` with its `.csproj` (with a `<Version>`), an `icon.png` and a `plugin.json` holding the Marketplace fields (`name`, `author`, `description`, `category`, `uses`, `requires`, `showsActivity`, `repoUrl`).
+- Put each plugin in `plugins/<AssemblyName>/` with its `.csproj` (with a `<Version>`), an `icon.png` and a `plugin.json` holding the Marketplace fields (`name`, `author`, `description`, `category`, `uses`, `requires`, `processes`, `showsActivity`, `repoUrl`).
 - In `pack.cs`, change the repo `name` (it says `"Aura"`).
 - In `release.yml`, replace the checks step with your own checks, and set `AURA_REF` to the oldest Aura tag you support.
 - Your repo's meta.json URL is then `https://raw.githubusercontent.com/<you>/<repo>/main/meta.json`.

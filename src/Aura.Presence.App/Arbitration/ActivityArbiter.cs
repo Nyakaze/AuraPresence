@@ -8,11 +8,13 @@ public sealed class ActivityArbiter(Func<ActivityKind, int>? slotOf = null)
 {
     private readonly Lock _gate = new();
     private readonly Dictionary<string, ActivityClaim> _claims = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _foreground = new(StringComparer.Ordinal);
     private readonly Func<ActivityKind, int> _slotOf = slotOf ?? (_ => 0);
 
     private string[] _order = [];
     private string? _pinnedSourceId;
     private bool _oneAtATime;
+    private long _foregroundCount;
     private ActivityClaim[] _shown = [];
 
     public event Action<IReadOnlyList<ActivityClaim>>? ShownChanged;
@@ -77,6 +79,11 @@ public sealed class ActivityArbiter(Func<ActivityKind, int>? slotOf = null)
         UpdateAndNotify(() => _oneAtATime = on);
     }
 
+    public void Foreground(string sourceId)
+    {
+        UpdateAndNotify(() => _foreground[sourceId] = ++_foregroundCount);
+    }
+
     private void UpdateAndNotify(Action mutate)
     {
         ActivityClaim[] next;
@@ -94,12 +101,20 @@ public sealed class ActivityArbiter(Func<ActivityKind, int>? slotOf = null)
             ShownChanged?.Invoke(next);
     }
 
-    private List<ActivityClaim> Rank() =>
-        [.. _claims.Values
+    private List<ActivityClaim> Rank()
+    {
+        var gamesAt = _claims.Values.Where(IsGame).Select(claim => Position(claim.SourceId)).DefaultIfEmpty().Min();
+
+        return [.. _claims.Values
             .OrderBy(claim => claim.SourceId == _pinnedSourceId ? 0 : 1)
+            .ThenBy(claim => IsGame(claim) ? gamesAt : Position(claim.SourceId))
+            .ThenByDescending(claim => _foreground.GetValueOrDefault(claim.SourceId))
             .ThenBy(claim => Position(claim.SourceId))
             .ThenByDescending(claim => claim.Priority)
             .ThenByDescending(claim => claim.UpdatedAt)];
+    }
+
+    private bool IsGame(ActivityClaim claim) => _slotOf(claim.Activity.Kind) == 0;
 
     private int Position(string sourceId)
     {

@@ -29,6 +29,7 @@ public partial class App : Application
     private int _refreshQueued;
     private int _catalogRun;
     private readonly HashSet<string> _triedUpdates = [];
+    private Native.WinEventProc? _foregroundChanged;
 
     public static new App Current => (App)Application.Current;
 
@@ -304,12 +305,39 @@ public partial class App : Application
     {
         _log.Info($"Aura started (API {PluginStore.ApiVersion.ToString(2)}).");
         await Host.StartAsync(PluginLoader.LoadAll(AppPaths.DevPlugins, AppPaths.Plugins));
+        Dispatcher.Invoke(WatchForeground);
 
         using var hourly = new PeriodicTimer(TimeSpan.FromHours(1));
 
         do
             await CheckForUpdatesAsync();
         while (await hourly.WaitForNextTickAsync());
+    }
+
+    private void WatchForeground()
+    {
+        _foregroundChanged = (_, _, window, _, _, _, _) => Dispatcher.InvokeAsync(() => OnForeground(window));
+        Native.SetWinEventHook(Native.EventSystemForeground, Native.EventSystemForeground, IntPtr.Zero, _foregroundChanged, 0, 0, 0);
+        OnForeground(Native.GetForegroundWindow());
+    }
+
+    private void OnForeground(IntPtr window)
+    {
+        Native.GetWindowThreadProcessId(window, out var processId);
+        string name;
+
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            name = process.ProcessName;
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            return;
+        }
+
+        if (Host.Plugins.FirstOrDefault(plugin => plugin.Manifest?.Processes.Contains(name, StringComparer.OrdinalIgnoreCase) == true) is { } game)
+            Arbiter.Foreground(game.Id);
     }
 
     private void QueueRefresh()
