@@ -78,6 +78,9 @@ Check(party is { Id: null, CurrentSize: 3, MaxSize: 12 }, "a party size reaches 
 Check(ActivityMapper.ToRichPresence(new PresenceActivity { Party = new PresenceParty(5, 4) }).Party is null, "an overfull party is left out");
 Check(ActivityMapper.ToRichPresence(new PresenceActivity { Party = new PresenceParty(0, 4) }).Party is null, "an empty party is left out");
 
+Check(Aura.Presence.Services.AniList.AniListClient.TitlesMatch("Kashita Maryoku wa Revo Barai de Kyousei Choushuu",
+    "Kashita Maryoku wa [Revo Barai] de Kyousei Choushuu", null), "an anilist title matches across punctuation");
+
 Console.WriteLine("All host checks passed.");
 
 static void Check(bool condition, string what)

@@ -149,8 +149,15 @@ public sealed class AniListClient : IDisposable
             AniListGraphQl.Text(media, "format"));
     }
 
-    private static bool Overlaps(string searched, string? candidate) =>
-        !string.IsNullOrWhiteSpace(candidate) &&
-        (searched.Contains(candidate, StringComparison.OrdinalIgnoreCase) ||
-         candidate.Contains(searched, StringComparison.OrdinalIgnoreCase));
+    private static bool Overlaps(string searched, string? candidate)
+    {
+        var mine = LettersAndDigits(searched);
+        var theirs = LettersAndDigits(candidate);
+
+        return mine.Length > 0 && theirs.Length > 0 &&
+               (mine.Contains(theirs, StringComparison.Ordinal) || theirs.Contains(mine, StringComparison.Ordinal));
+    }
+
+    private static string LettersAndDigits(string? title) =>
+        string.Concat((title ?? "").Where(char.IsLetterOrDigit)).ToLowerInvariant();
 }
