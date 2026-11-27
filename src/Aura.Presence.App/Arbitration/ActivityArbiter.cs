@@ -9,6 +9,7 @@ public sealed class ActivityArbiter(Func<ActivityKind, int>? slotOf = null)
     private readonly Lock _gate = new();
     private readonly Dictionary<string, ActivityClaim> _claims = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> _foreground = new(StringComparer.Ordinal);
+    private readonly Dictionary<int, long> _otherGames = [];
     private readonly Func<ActivityKind, int> _slotOf = slotOf ?? (_ => 0);
 
     private string[] _order = [];
@@ -84,6 +85,16 @@ public sealed class ActivityArbiter(Func<ActivityKind, int>? slotOf = null)
         UpdateAndNotify(() => _foreground[sourceId] = ++_foregroundCount);
     }
 
+    public void OtherGameInFront(int processId)
+    {
+        UpdateAndNotify(() => _otherGames[processId] = ++_foregroundCount);
+    }
+
+    public void OtherGameClosed(int processId)
+    {
+        UpdateAndNotify(() => _otherGames.Remove(processId));
+    }
+
     private void UpdateAndNotify(Action mutate)
     {
         ActivityClaim[] next;
@@ -103,9 +114,12 @@ public sealed class ActivityArbiter(Func<ActivityKind, int>? slotOf = null)
 
     private List<ActivityClaim> Rank()
     {
-        var gamesAt = _claims.Values.Where(IsGame).Select(claim => Position(claim.SourceId)).DefaultIfEmpty().Min();
+        var otherGameAt = _otherGames.Values.DefaultIfEmpty().Max();
+        var claims = _claims.Values.Where(claim => !IsGame(claim) || claim.SourceId == _pinnedSourceId ||
+                                                   _foreground.GetValueOrDefault(claim.SourceId) >= otherGameAt).ToList();
+        var gamesAt = claims.Where(IsGame).Select(claim => Position(claim.SourceId)).DefaultIfEmpty().Min();
 
-        return [.. _claims.Values
+        return [.. claims
             .OrderBy(claim => claim.SourceId == _pinnedSourceId ? 0 : 1)
             .ThenBy(claim => IsGame(claim) ? gamesAt : Position(claim.SourceId))
             .ThenByDescending(claim => _foreground.GetValueOrDefault(claim.SourceId))

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Http;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using Aura.Presence.App.Arbitration;
@@ -8,6 +9,8 @@ using Aura.Presence.App.Plugins;
 using Aura.Presence.App.Tray;
 using Aura.Presence.App.Ui;
 using Aura.Presence.Sdk;
+using Crovus.RichPresence;
+using Microsoft.Win32.SafeHandles;
 
 namespace Aura.Presence.App;
 
@@ -30,6 +33,8 @@ public partial class App : Application
     private int _catalogRun;
     private readonly HashSet<string> _triedUpdates = [];
     private Native.WinEventProc? _foregroundChanged;
+    private readonly HashSet<int> _otherGames = [];
+    private readonly DiscordGames _discordGames = new();
 
     public static new App Current => (App)Application.Current;
 
@@ -308,10 +313,35 @@ public partial class App : Application
         Dispatcher.Invoke(WatchForeground);
 
         using var hourly = new PeriodicTimer(TimeSpan.FromHours(1));
+        var hours = 0;
 
         do
+        {
+            if (hours++ % 24 == 0)
+                await LoadGamesAsync();
+
             await CheckForUpdatesAsync();
+        }
         while (await hourly.WaitForNextTickAsync());
+    }
+
+    private async Task LoadGamesAsync()
+    {
+        try
+        {
+            _discordGames.Detectable = await DetectableGames.FetchAsync();
+            _log.Info($"Loaded {_discordGames.Detectable.Count} game executables that Discord detects.");
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            _log.Warn($"Could not load the games Discord detects: {exception.Message}");
+        }
+
+        Dispatcher.Invoke(() =>
+        {
+            _discordGames.Refresh();
+            OnForeground(Native.GetForegroundWindow());
+        });
     }
 
     private void WatchForeground()
@@ -324,6 +354,13 @@ public partial class App : Application
     private void OnForeground(IntPtr window)
     {
         Native.GetWindowThreadProcessId(window, out var processId);
+
+        if (_otherGames.Contains(processId))
+        {
+            Arbiter.OtherGameInFront(processId);
+            return;
+        }
+
         string name;
 
         try
@@ -336,8 +373,47 @@ public partial class App : Application
             return;
         }
 
-        if (Host.Plugins.FirstOrDefault(plugin => plugin.Manifest?.Processes.Contains(name, StringComparer.OrdinalIgnoreCase) == true) is { } game)
-            Arbiter.Foreground(game.Id);
+        if (Host.Plugins.FirstOrDefault(plugin => plugin.Manifest?.Processes.Contains(name, StringComparer.OrdinalIgnoreCase) == true) is { } plugin)
+            Arbiter.Foreground(plugin.Id);
+        else if (ImagePath(processId) is { } path && _discordGames.Find(path) is { } game)
+            WatchOtherGame(processId, game);
+    }
+
+    private void WatchOtherGame(int processId, string game)
+    {
+        var exit = new ProcessExit(Native.OpenProcess(Native.Synchronize, false, processId));
+
+        if (exit.SafeWaitHandle.IsInvalid)
+        {
+            exit.Dispose();
+            return;
+        }
+
+        _otherGames.Add(processId);
+        ThreadPool.RegisterWaitForSingleObject(exit, (_, _) => Dispatcher.InvokeAsync(() =>
+        {
+            exit.Dispose();
+            _otherGames.Remove(processId);
+            Arbiter.OtherGameClosed(processId);
+            _log.Info($"{game} closed.");
+        }), null, Timeout.Infinite, true);
+
+        Arbiter.OtherGameInFront(processId);
+        _log.Info($"{game} is in front and has no plugin: Aura's game card steps aside for Discord's own.");
+    }
+
+    private static string? ImagePath(int processId)
+    {
+        using var process = Native.OpenProcess(Native.ProcessQueryLimitedInformation, false, processId);
+        var buffer = new char[1024];
+        var size = buffer.Length;
+
+        return !process.IsInvalid && Native.QueryFullProcessImageName(process, 0, buffer, ref size) ? new string(buffer, 0, size) : null;
+    }
+
+    private sealed class ProcessExit : WaitHandle
+    {
+        public ProcessExit(SafeWaitHandle process) => SafeWaitHandle = process;
     }
 
     private void QueueRefresh()

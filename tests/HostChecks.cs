@@ -90,6 +90,43 @@ games.SetOneAtATime(true);
 Check(games.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-watch"]), "one at a time keeps a higher Watching plugin above the games");
 games.SetOrder(["check-second-game", "check-watch", "check-first-game"]);
 Check(games.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-first-game"]), "one at a time puts the game in front at the highest game's place");
+games.SetOneAtATime(false);
+games.OtherGameInFront(42);
+Check(games.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-watch"]), "a game without a plugin in front hides the game cards");
+games.Foreground("check-second-game");
+Check(games.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-second-game", "check-watch"]), "a game with a plugin back in front shows again");
+games.OtherGameInFront(42);
+games.Pin("check-first-game");
+Check(games.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-first-game", "check-watch"]), "a pin still shows over a game without a plugin");
+games.Pin(null);
+games.OtherGameClosed(42);
+Check(games.Shown.Select(claim => claim.SourceId).SequenceEqual(["check-second-game", "check-watch"]), "closing that game brings back the game last in front");
+
+const string detectable = """
+    [{"name": "Shooter", "executables": [{"is_launcher": false, "name": "win64/shooter-win64-shipping.exe", "os": "win32"},
+                                         {"is_launcher": true, "name": "shooterlauncher.exe", "os": "win32"},
+                                         {"is_launcher": false, "name": "shooter", "os": "linux"}]},
+     {"name": "Classic", "executables": [{"is_launcher": false, "name": ">classic.exe", "os": "win32"}]},
+     {"name": "Blocky", "executables": [{"arguments": "-game blocky", "is_launcher": false, "name": ">javaw.exe", "os": "win32"}]},
+     {"name": "Broken", "executables": null}, {"executables": [{"name": "nameless.exe", "os": "win32"}]}]
+    """;
+var detectableGames = await Crovus.RichPresence.DetectableGames.LoadAsync(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(detectable)));
+Check(detectableGames.Find(@"D:\Games\Shooter\Binaries\Win64\Shooter-Win64-Shipping.exe") == "Shooter", "a detectable game matches by its path ending");
+Check(detectableGames.Find(@"D:\Games\Shooter\Binaries\XWin64\Shooter-Win64-Shipping.exe") is null, "a path ending only matches whole folders");
+Check(detectableGames.Find(@"D:\Games\Shooter\ShooterLauncher.exe") is null, "a launcher is not a game");
+Check(detectableGames.Find(@"C:\Classic\classic.exe") == "Classic" && detectableGames.Count == 2, "exact names match, and entries needing arguments or broken are skipped");
+
+var discordStorage = Directory.CreateTempSubdirectory("aura-discord-checks-").FullName;
+WriteLocalStorage(discordStorage, "https://discord.com", "RunningGameStore", """
+    {"enableDetection": {"d:/games/shooter/binaries/win64/shooter-win64-shipping.exe:Shooter": false},
+     "gameOverrides": {"c:/mods/javaw.exe:Blocks": {"exePath": "c:/mods/javaw.exe", "name": "Blocks", "add": true, "hidden": false}}}
+    """);
+var discordGames = new DiscordGames(discordStorage) { Detectable = detectableGames };
+discordGames.Refresh();
+Check(discordGames.Find(@"D:\Games\Shooter\Binaries\Win64\Shooter-Win64-Shipping.exe") is null, "a game with detection off in Discord doesn't count");
+Check(discordGames.Find(@"C:\Classic\classic.exe") == "Classic", "a game Discord detects counts");
+Check(discordGames.Find(@"C:\Mods\javaw.exe") == "Blocks", "a game added in Discord counts");
+Directory.Delete(discordStorage, recursive: true);
 
 var party = ActivityMapper.ToRichPresence(new PresenceActivity { State = "In a match", Party = new PresenceParty(3, 12) }).Party;
 Check(party is { Id: null, CurrentSize: 3, MaxSize: 12 }, "a party size reaches Discord");
@@ -100,6 +137,30 @@ Check(Aura.Presence.Services.AniList.AniListClient.TitlesMatch("Kashita Maryoku 
     "Kashita Maryoku wa [Revo Barai] de Kyousei Choushuu", null), "an anilist title matches across punctuation");
 
 Console.WriteLine("All host checks passed.");
+
+static void WriteLocalStorage(string directory, string origin, string key, string json)
+{
+    var batch = new MemoryStream();
+    batch.Write(BitConverter.GetBytes(1UL));
+    batch.Write(BitConverter.GetBytes(1));
+    batch.WriteByte(1);
+
+    foreach (var slice in new[] { System.Text.Encoding.Latin1.GetBytes($"_{origin}\0\u0001{key}"), [1, .. System.Text.Encoding.Latin1.GetBytes(json)] })
+    {
+        for (var length = (uint)slice.Length; ; length >>= 7)
+        {
+            batch.WriteByte((byte)(length < 0x80 ? length : length & 0x7F | 0x80));
+
+            if (length < 0x80)
+                break;
+        }
+
+        batch.Write(slice);
+    }
+
+    File.WriteAllBytes(Path.Combine(directory, "000001.log"),
+        [0, 0, 0, 0, .. BitConverter.GetBytes((ushort)batch.Length), 1, .. batch.ToArray()]);
+}
 
 static void Check(bool condition, string what)
 {

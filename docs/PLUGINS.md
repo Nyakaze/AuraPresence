@@ -280,7 +280,7 @@ A repo is one `meta.json` at an https URL. Users add that URL in Aura under **Ma
 | `iconUrl` | A square PNG, 128 px. |
 | `description`, `category`, `uses`, `showsActivity`, `repoUrl`, `author` | Shown on the Marketplace. `uses` lists what the plugin reads or touches, so users know what they install. `category` is free text and fills the filter (empty means "Other"). |
 | `requires` | What the plugin needs besides Aura. `["browserExtension"]` means the Aura browser extension; the Marketplace and the plugin's page then explain how to add it. |
-| `processes` | For games: the process names whose windows are the game, without `.exe`, e.g. `["VALORANT-Win64-Shipping"]`. When several games show Playing, the one last in the foreground wins over the plugin order; a pin still wins. |
+| `processes` | For games: the process names whose windows are the game, without `.exe`, e.g. `["VALORANT-Win64-Shipping"]`. When several games show Playing, the one last in the foreground wins over the plugin order; a pin still wins. While a game Discord detects (its list or games added there, with detection on) is last in the foreground and no plugin lists it, Aura hides its game cards so Discord shows that game, so a game plugin without `processes` loses its card while its game is in front. |
 
 Relative URLs resolve against the meta.json URL, and anything that isn't https is dropped. Aura skips an entry that is missing a required field and ignores unknown fields. Updates come only from the repo a plugin was installed from.
 

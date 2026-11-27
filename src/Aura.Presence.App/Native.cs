@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 
 namespace Aura.Presence.App;
 
@@ -25,6 +26,8 @@ internal static class Native
     public const int DwmUseImmersiveDarkMode = 20;
     public const int DwmBorderColor = 34;
     public const int EventSystemForeground = 3;
+    public const int ProcessQueryLimitedInformation = 0x1000;
+    public const int Synchronize = 0x100000;
 
     public delegate void WinEventProc(IntPtr hook, int eventType, IntPtr window, int objectId, int childId, int thread, int time);
 
@@ -69,6 +72,12 @@ internal static class Native
 
     [DllImport("user32.dll")]
     public static extern int GetWindowThreadProcessId(IntPtr window, out int processId);
+
+    [DllImport("kernel32.dll")]
+    public static extern SafeWaitHandle OpenProcess(int access, bool inheritHandle, int processId);
+
+    [DllImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", CharSet = CharSet.Unicode)]
+    public static extern bool QueryFullProcessImageName(SafeWaitHandle process, int flags, char[] name, ref int size);
 
     [DllImport("user32.dll")]
     public static extern int GetSystemMetrics(int index);
